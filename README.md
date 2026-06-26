@@ -29,6 +29,21 @@ configuration.
   structure provenance, space-group report, force-audit diagnostics, JSON/text
   summaries, and optional FC2 text exports.
 
+## Repository Layout
+
+| Path | Purpose |
+| --- | --- |
+| `docs/` | PhonoFlow 1.0 CLI documentation, including command usage, configuration, outputs, architecture, and testing notes. |
+| `examples/` | Minimal public structure examples for smoke tests and quick-start commands. The current public fixture is `Si.vasp`. |
+| `scripts/` | Small maintenance and validation helpers used by the command-line project. |
+| `src/phonoflow/` | Core Python package: CLI entry points, workflow orchestration, calculator backends, phonon/thermal logic, reporting, and I/O helpers. |
+| `tests/` | Public pytest suite for CLI behavior, configuration, workflow plumbing, backends, reporting, and output validation. |
+| `.gitattributes` | Git text/binary handling rules for consistent repository checkout behavior. |
+| `.gitignore` | Ignore rules for generated outputs, caches, model files, local archives, and other non-source artifacts. |
+| `LICENSE` | MIT license for the public release. |
+| `README.md` | Project overview, quick start, command summary, and repository boundary. |
+| `pyproject.toml` | Python package metadata, dependencies, optional extras, console script entry point, and test/tool configuration. |
+
 ## Install
 
 Use Python 3.10 or newer.
