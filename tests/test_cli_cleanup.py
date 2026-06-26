@@ -23,4 +23,6 @@ def test_readme_mentions_pynep_only_as_history():
     readme = Path("README.md").read_text(encoding="utf-8")
     lowered = readme.lower()
     assert "install pynep" not in lowered
-    assert "recommended backend is calorine cpunep" in lowered
+    assert "calorine cpunep is used for nep/nep89 workflows" in lowered
+    assert "dpa/deepmd workflows" in lowered
+    assert "deepmd backend and dpa model aliases" in lowered

@@ -64,7 +64,8 @@ python -m pip install -e ".[hiphive]"
 DeepMD/DPA runs require a compatible DeepMD-kit installation and user-provided
 model files.
 
-Recommended backend is Calorine CPUNEP for real NEP/NEP89 calculations.
+Calorine CPUNEP is used for NEP/NEP89 workflows; DPA/DeepMD workflows are
+available through the DeepMD backend and DPA model aliases.
 
 ## Quick Start
 
@@ -100,6 +101,18 @@ phonoflow run \
   --model-path /path/to/nep-model.txt \
   --backend calorine \
   --outdir work/si_dry_run \
+  --dry-run \
+  --overwrite
+```
+
+Resolve a DPA/DeepMD calculation without running heavy force evaluations:
+
+```bash
+phonoflow single \
+  --input-path examples/Si.vasp \
+  --backend dpa4neo \
+  --model-path /path/to/DPA4-Neo-OMat24-v20260528_rc.pt \
+  --outdir work/si_dpa_dry_run \
   --dry-run \
   --overwrite
 ```
