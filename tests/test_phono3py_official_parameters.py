@@ -53,15 +53,12 @@ def test_result_serialization_uses_new_symmetrize_fields() -> None:
     assert "phono3py_fc2_asr" not in data
 
 
-def test_parameter_chain_docs_keep_old_name_only_as_deprecated_compatibility() -> None:
-    for rel in ("docs/parameter_chain_audit.md", "docs/parameter_chain_audit_zh.md"):
-        text = (ROOT / rel).read_text(encoding="utf-8")
-        before_compatibility = text.split("Deprecated", 1)[0].split("已废弃", 1)[0]
-        assert "phono3py_symmetrize_fc2" in text
-        assert "phono3py_fc2_asr" not in before_compatibility
-        if "phono3py_fc2_asr" in text:
-            window = text[max(0, text.index("phono3py_fc2_asr") - 120) : text.index("phono3py_fc2_asr") + 160]
-            assert "deprecated" in window.lower() or "已废弃" in window
+def test_configuration_docs_keep_old_name_only_as_deprecated_compatibility() -> None:
+    text = (ROOT / "docs/configuration.md").read_text(encoding="utf-8")
+    inventory = text.split("## Accepted Aliases", 1)[0]
+    assert "phono3py_symmetrize_fc2" in inventory
+    assert "phono3py_fc2_asr" not in inventory
+    assert "`phono3py_fc2_asr` is accepted as a deprecated alias" in text
 
 
 def test_thermal_fc2_symmetrization_flag_calls_official_method() -> None:

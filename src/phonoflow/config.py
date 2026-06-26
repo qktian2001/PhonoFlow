@@ -410,8 +410,8 @@ def default_config_dict() -> dict[str, Any]:
     return WorkflowConfig(
         input_path=Path("examples/Si.vasp"),
         input_dir=Path("examples"),
-        outdir=Path("results"),
-        model_path=Path("nep89_potential/nep89_20250409.txt"),
+        outdir=Path("work/phonoflow_run"),
+        model_path=Path("/path/to/model.txt"),
         backend="dummy",
     ).to_dict()
 

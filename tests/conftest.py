@@ -24,3 +24,5 @@ def public_model_placeholders(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setattr(defaults, "DEFAULT_NEP89_MODEL_PATH", nep_model)
     monkeypatch.setattr(compare_models, "DEFAULT_NEP89_MODEL_PATH", nep_model)
     compare_models.MODEL_SPECS["nep89"]["model_path"] = nep_model
+
+    yield
