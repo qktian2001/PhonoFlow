@@ -1,0 +1,68 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "phonoflow"
+version = "1.0.0"
+description = "PhonoFlow 1.0 phonon and lattice thermal-transport workflow."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+  { name = "PhonoFlow contributors" }
+]
+dependencies = [
+  "numpy",
+  "scipy",
+  "pandas",
+  "matplotlib",
+  "ase",
+  "phonopy",
+  "spglib",
+  "seekpath",
+  "pydantic>=2",
+  "typer",
+  "rich",
+  "pyyaml",
+]
+
+[project.optional-dependencies]
+calorine = [
+  "calorine",
+]
+dev = [
+  "pytest",
+  "ruff",
+  "mypy",
+]
+thermal = [
+  "phono3py",
+  "h5py",
+]
+hiphive = [
+  "hiphive",
+]
+webviz = [
+  "seekpath",
+]
+web = [
+  "fastapi",
+  "uvicorn",
+  "python-multipart",
+  "crystal-toolkit>=2026.6.9",
+]
+
+[project.scripts]
+phonoflow = "phonoflow.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

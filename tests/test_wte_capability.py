@@ -1,0 +1,43 @@
+from __future__ import annotations
+
+import sys
+from types import SimpleNamespace
+
+from phonoflow.thermal import wte_backend
+
+
+def test_wte_capability_accepts_wte_module(monkeypatch) -> None:
+    monkeypatch.setattr(wte_backend, "_find_module", lambda name: name == "wte")
+    monkeypatch.setattr(wte_backend, "_import_module", lambda name: SimpleNamespace(__name__=name))
+
+    capability = wte_backend.get_wte_backend_capability()
+
+    assert capability["available"] is True
+    assert capability["module_name"] == "wte"
+    assert capability["wte_module_found"] is True
+
+
+def test_wte_capability_accepts_phono3py_wte_module_when_wte_is_missing(monkeypatch) -> None:
+    monkeypatch.setattr(wte_backend, "_find_module", lambda name: name == "phono3py_wte")
+    monkeypatch.setattr(wte_backend, "_import_module", lambda name: SimpleNamespace(__name__=name))
+
+    capability = wte_backend.get_wte_backend_capability()
+
+    assert capability["available"] is True
+    assert capability["module_name"] == "phono3py_wte"
+    assert capability["phono3py_wte_module_found"] is True
+
+
+def test_wte_capability_missing_reason_contains_install_command(monkeypatch) -> None:
+    monkeypatch.setattr(wte_backend, "_find_module", lambda name: False)
+
+    capability = wte_backend.get_wte_backend_capability()
+
+    assert capability["available"] is False
+    assert "python -m pip install" in capability["reason"]
+    assert "phono3py" in capability["reason"]
+    assert capability["module_name"] is None
+    assert capability["python_executable"] == sys.executable
+    assert capability["missing_modules"] == ["wte", "phono3py_wte"]
+    assert "git clone" in capability["installation_hint"]
+    assert "restart" in capability["installation_hint"].lower()
