@@ -453,6 +453,8 @@ def test_hiphive_uses_phono3py_constructor_and_runtime_parameter_layers(monkeypa
     assert result["phono3py_symmetrize_fc3_applied"] is False
     assert result["hiphive_uses_phono3py_symmetrize"] is False
     assert result["hiphive_rotational_sum_rules"] == ["Huang", "Born-Huang"]
+    assert result["timing_breakdown"]["fc3_seconds"] > 0.0
+    assert result["timing_breakdown"]["thermal_lifetime_seconds"] > 0.0
 
 
 def test_hiphive_experimental_parameters_are_recorded() -> None:

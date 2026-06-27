@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Callable
@@ -75,6 +76,9 @@ def run_hiphive_kappa_workflow(
     outdir = Path(outdir)
     outdir.mkdir(parents=True, exist_ok=True)
     warnings: list[str] = []
+    fc3_started = time.perf_counter()
+    fc3_seconds = 0.0
+    thermal_started: float | None = None
     try:
         fc3_supercell_dim = _resolve_fc3_supercell_dim(atoms, config)
         kappa_mesh = _resolve_kappa_mesh(config)
@@ -258,6 +262,8 @@ def run_hiphive_kappa_workflow(
         phono3py.fc2 = fc2
         phono3py.fc3 = fc3
         hiphive_symmetrization_info = _hiphive_symmetrization_info(config)
+        fc3_seconds = time.perf_counter() - fc3_started
+        thermal_started = time.perf_counter()
         phono3py.mesh_numbers = kappa_mesh
         phono3py.init_phph_interaction()
         is_lbte = config.kappa_method == "lbte"
@@ -292,6 +298,7 @@ def run_hiphive_kappa_workflow(
             kappa_diagnostics=kappa_diagnostics,
             lifetime=lifetime,
         )
+        thermal_seconds = time.perf_counter() - thermal_started
 
         files: dict[str, Any] = {
             "fc2_hdf5": fc2_path.name,
@@ -368,6 +375,10 @@ def run_hiphive_kappa_workflow(
             "kappa_unit": "W/m-K",
             "summary": summarize_kappa(rows),
             "lifetime": lifetime,
+            "timing_breakdown": {
+                "fc3_seconds": round(fc3_seconds, 6),
+                "thermal_lifetime_seconds": round(thermal_seconds, 6),
+            },
             "warnings": warnings,
             "reason": None,
         }
@@ -394,6 +405,18 @@ def run_hiphive_kappa_workflow(
             phonopy_version=wte_capability["phonopy_version"],
             transport_type="WTE" if config.wigner and wte_capability["available"] else None,
             wigner_unavailable_reason=reason if config.wigner else None,
+            timing_breakdown={
+                "fc3_seconds": round(
+                    fc3_seconds or (time.perf_counter() - fc3_started),
+                    6,
+                ),
+                "thermal_lifetime_seconds": round(
+                    time.perf_counter() - thermal_started,
+                    6,
+                )
+                if thermal_started is not None
+                else 0.0,
+            },
             **_hiphive_metadata(config),
         )
 
