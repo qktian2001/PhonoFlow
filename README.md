@@ -73,6 +73,7 @@ Check the command surface and dependency status:
 
 ```bash
 phonoflow --help
+phonoflow --help-all
 phonoflow version
 phonoflow doctor --verbose
 ```
@@ -83,62 +84,46 @@ Generate a complete example config:
 phonoflow init-config --out config.yaml
 ```
 
-Run the built-in dummy workflow with the public Si example:
+### NEP/NEP89 Workflows
 
-```bash
-phonoflow single \
-  --input-path examples/Si.vasp \
-  --backend dummy \
-  --outdir work/si_dummy \
-  --overwrite
-```
-
-Resolve a real NEP calculation without running heavy force evaluations:
+Harmonic phonons only, using `run`:
 
 ```bash
 phonoflow run \
   --input-path examples/Si.vasp \
   --model-path /path/to/nep-model.txt \
   --backend calorine \
-  --outdir work/si_dry_run \
-  --dry-run \
-  --overwrite
-```
-
-Resolve a DPA/DeepMD calculation without running heavy force evaluations:
-
-```bash
-phonoflow single \
-  --input-path examples/Si.vasp \
-  --backend dpa4neo \
-  --model-path /path/to/DPA4-Neo-OMat24-v20260528_rc.pt \
-  --outdir work/si_dpa_dry_run \
-  --dry-run \
-  --overwrite
-```
-
-Run a harmonic phonon calculation:
-
-```bash
-phonoflow run \
-  --input-path examples/Si.vasp \
-  --model-path /path/to/nep-model.txt \
-  --backend calorine \
-  --outdir work/si_phonon \
+  --outdir work/nep_phonon \
   --supercell-dim auto \
   --mesh auto \
   --relax \
   --overwrite
 ```
 
-Enable thermal conductivity:
+Harmonic phonons only, using `single`:
+
+```bash
+phonoflow single \
+  --input-path examples/Si.vasp \
+  --model-path /path/to/nep-model.txt \
+  --backend calorine \
+  --outdir work/nep_phonon_single \
+  --supercell-dim auto \
+  --mesh auto \
+  --relax \
+  --overwrite
+```
+
+Thermal conductivity, using `run`:
 
 ```bash
 phonoflow run \
   --input-path examples/Si.vasp \
   --model-path /path/to/nep-model.txt \
   --backend calorine \
-  --outdir work/si_kappa \
+  --outdir work/nep_kappa \
+  --supercell-dim auto \
+  --mesh auto \
   --compute-kappa \
   --fc3-method finite-displacement \
   --fc3-supercell-dim auto \
@@ -148,14 +133,113 @@ phonoflow run \
   --overwrite
 ```
 
-Compare two models:
+Thermal conductivity, using `single`:
+
+```bash
+phonoflow single \
+  --input-path examples/Si.vasp \
+  --model-path /path/to/nep-model.txt \
+  --backend calorine \
+  --outdir work/nep_kappa_single \
+  --supercell-dim auto \
+  --mesh auto \
+  --compute-kappa \
+  --fc3-method finite-displacement \
+  --fc3-supercell-dim auto \
+  --kappa-mesh auto \
+  --method rta \
+  --temperatures 300 \
+  --overwrite
+```
+
+### DPA/DeepMD Workflows
+
+Harmonic phonons only, using `run`:
+
+```bash
+phonoflow run \
+  --input-path examples/Si.vasp \
+  --model-path /path/to/DPA4-Neo-OMat24-v20260528_rc.pt \
+  --backend dpa4neo \
+  --outdir work/dpa_phonon \
+  --supercell-dim auto \
+  --mesh auto \
+  --overwrite
+```
+
+Harmonic phonons only, using `single`:
+
+```bash
+phonoflow single \
+  --input-path examples/Si.vasp \
+  --model-path /path/to/DPA4-Neo-OMat24-v20260528_rc.pt \
+  --backend dpa4neo \
+  --outdir work/dpa_phonon_single \
+  --supercell-dim auto \
+  --mesh auto \
+  --overwrite
+```
+
+Thermal conductivity, using `run`:
+
+```bash
+phonoflow run \
+  --input-path examples/Si.vasp \
+  --model-path /path/to/DPA4-Neo-OMat24-v20260528_rc.pt \
+  --backend dpa4neo \
+  --outdir work/dpa_kappa \
+  --supercell-dim auto \
+  --mesh auto \
+  --compute-kappa \
+  --fc3-method finite-displacement \
+  --fc3-supercell-dim auto \
+  --kappa-mesh auto \
+  --method rta \
+  --temperatures 300 \
+  --overwrite
+```
+
+Thermal conductivity, using `single`:
+
+```bash
+phonoflow single \
+  --input-path examples/Si.vasp \
+  --model-path /path/to/DPA4-Neo-OMat24-v20260528_rc.pt \
+  --backend dpa4neo \
+  --outdir work/dpa_kappa_single \
+  --supercell-dim auto \
+  --mesh auto \
+  --compute-kappa \
+  --fc3-method finite-displacement \
+  --fc3-supercell-dim auto \
+  --kappa-mesh auto \
+  --method rta \
+  --temperatures 300 \
+  --overwrite
+```
+
+### Compare Models
+
+Compare NEP/NEP89 models:
 
 ```bash
 phonoflow compare-models \
   --input-path examples/Si.vasp \
-  --outdir work/compare_si \
+  --outdir work/compare_nep \
   --model-label nep_a --backend calorine --model-path /path/to/nep-a.txt \
   --model-label nep_b --backend calorine --model-path /path/to/nep-b.txt \
+  --mesh auto \
+  --overwrite
+```
+
+Compare DPA/DeepMD models:
+
+```bash
+phonoflow compare-models \
+  --input-path examples/Si.vasp \
+  --outdir work/compare_dpa \
+  --model-label dpa31 --backend dpa31 --model-path /path/to/DPA-3.1-3M.pt \
+  --model-label dpa4neo --backend dpa4neo --model-path /path/to/DPA4-Neo-OMat24-v20260528_rc.pt \
   --mesh auto \
   --overwrite
 ```
@@ -163,6 +247,8 @@ phonoflow compare-models \
 ## Commands
 
 - `phonoflow version`: print the package version.
+- `phonoflow --help-all`: print all workflow parameters, defaults, and
+  purposes.
 - `phonoflow doctor`: check required and optional runtime dependencies.
 - `phonoflow init-config`: write a full YAML configuration template.
 - `phonoflow single`: run from a YAML config plus CLI overrides.

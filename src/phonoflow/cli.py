@@ -19,11 +19,127 @@ from phonoflow.constants import PROJECT_NAME, VERSION
 from phonoflow.exceptions import PhonoFlowError
 
 app = typer.Typer(
-    help="NEP/NEP89 phonon workflow with Calorine CPUNEP.",
+    help="PhonoFlow phonon and lattice thermal-transport workflow.",
     invoke_without_command=True,
     no_args_is_help=True,
 )
 console = Console()
+
+_PARAMETER_PURPOSES: dict[str, str] = {
+    "input_path": "Single input structure path.",
+    "input_dir": "Batch input directory.",
+    "outdir": "Output directory; command code resolves a default when omitted.",
+    "model_path": "User-provided NEP, DeepMD, or compatible model path.",
+    "backend": "Calculator backend selection.",
+    "backend_alias": "Optional backend alias metadata.",
+    "dpa_model_name": "Optional named DPA model selector.",
+    "supercell_dim": "FC2 supercell dimensions or automatic inference.",
+    "mesh": "Harmonic/DOS q mesh; q_mesh is accepted as an alias.",
+    "target_supercell_length": "Target length for automatic FC2 supercell inference.",
+    "min_supercell_dim": "Minimum automatic FC2 multiplier.",
+    "max_supercell_dim": "Maximum automatic FC2 multiplier.",
+    "max_supercell_atoms": "Maximum atoms in automatic FC2 supercell.",
+    "relax": "Enable structure relaxation.",
+    "relax_cell": "Relax cell and positions together.",
+    "displacement": "Harmonic finite-displacement amplitude.",
+    "fmax": "Relaxation force threshold in eV/A.",
+    "max_steps": "Maximum relaxation optimizer steps.",
+    "optimizer": "ASE optimizer name.",
+    "relax_backend": "Backend used for relaxation.",
+    "relax_model_path": "Optional relaxation-specific model path.",
+    "allow_dpa_relax": "Explicitly permit DPA/DeepMD relaxation.",
+    "band": "Legacy band selector.",
+    "kpath_mode": "K-path generator: auto, 3d_seekpath, 2d_ase, or custom.",
+    "band_npoints": "Points per band segment.",
+    "bandpath_symprec": "SeekPath/2D ASE band-path precision.",
+    "bandpath_with_time_reversal": "Use time-reversal reduction for 3D SeekPath.",
+    "fc_method": "Harmonic force-constant method.",
+    "compute_kappa": "Enable FC3 and thermal conductivity.",
+    "fc3_method": "FC3 method: finite displacement or HiPhive.",
+    "kappa_method": "Thermal solver method: RTA or LBTE.",
+    "wigner": "Request Wigner transport when available.",
+    "temperatures": "Thermal conductivity temperatures in K.",
+    "kappa_mesh": "Phono3py kappa mesh.",
+    "fc3_supercell_dim": "FC3 supercell dimensions or automatic inference.",
+    "fc3_target_supercell_length": "Target length for automatic FC3 supercell inference.",
+    "max_fc3_supercell_atoms": "Maximum atoms in automatic FC3 supercell.",
+    "fc3_displacement": "FC3 displacement amplitude.",
+    "fc3_cutoff_pair_distance": "Optional FC3 pair cutoff.",
+    "max_fc3_displacements": "Optional smoke-test cap on FC3 displacements.",
+    "phono3py_symprec": "Phono3py symmetry precision.",
+    "phono3py_cutoff_frequency": "Phono3py cutoff frequency in THz.",
+    "phono3py_plusminus": "Phono3py plus/minus displacement mode.",
+    "phono3py_diagonal": "Use diagonal FC3 displacements.",
+    "phono3py_symmetry": "Use Phono3py symmetry reduction.",
+    "phono3py_mesh_symmetry": "Use mesh symmetry for kappa.",
+    "phono3py_isotope": "Enable isotope scattering.",
+    "boundary_mfp": "Boundary mean free path; zero disables it.",
+    "cutoff_pair_distance": "Phono3py pair cutoff; zero disables it.",
+    "phono3py_symmetrize_fc2": "Apply official Phono3py FC2 symmetrization.",
+    "phono3py_symmetrize_fc3": "Apply official Phono3py FC3 symmetrization.",
+    "deepmd_reuse_calculator": "Reuse one DeepMD calculator in force loops.",
+    "deepmd_force_backend": "DeepMD force path: ASE or DeepPot direct.",
+    "deepmd_device": "DeepMD runtime device.",
+    "deepmd_model_head": "Optional multitask DeepMD model head.",
+    "deepmd_deterministic": "Best-effort deterministic DeepMD environment.",
+    "save_force_audit": "Save finite-displacement force diagnostics.",
+    "n_structures": "HiPhive rattle structure count.",
+    "rattle_std": "HiPhive rattle standard deviation.",
+    "cutoffs": "HiPhive cutoff radii.",
+    "min_dist": "HiPhive minimum interatomic distance.",
+    "primitive_matrix": "Phonopy primitive matrix setting.",
+    "dos": "Compute DOS outputs.",
+    "asr": "Apply acoustic sum rule where possible.",
+    "symmetrize_fc": "Symmetrize FC2 where possible.",
+    "export_fc2_text": "Export Phonopy and ShengBTE-style FC2 text files.",
+    "fc2_text_name": "Phonopy FC2 text filename.",
+    "shengbte_fc2_name": "ShengBTE-style FC2 text filename.",
+    "plot_dpi": "Plot resolution.",
+    "plot_format": "Plot format; current release writes PNG.",
+    "imag_threshold": "Imaginary-mode stability threshold in THz.",
+    "phonopy_symprec": "Phonopy symmetry precision.",
+    "angle_tolerance": "spglib angle tolerance; -1.0 means default.",
+    "max_workers": "Reserved worker count field.",
+    "dry_run": "Resolve settings without heavy calculation.",
+    "print_config": "Print resolved settings.",
+    "overwrite": "Allow replacing existing output directories.",
+    "resume": "Reuse complete successful outputs.",
+    "log_level": "Logging verbosity.",
+}
+
+
+def _format_parameter_default(value: Any) -> str:
+    if value is None:
+        return "null"
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, str):
+        return value
+    return json.dumps(value, ensure_ascii=False)
+
+
+def _print_parameter_reference() -> None:
+    """Print the WorkflowConfig parameter reference used by docs/configuration.md."""
+
+    config = WorkflowConfig()
+    table = Table(title="PhonoFlow workflow parameters")
+    table.add_column("Parameter", style="cyan", no_wrap=True)
+    table.add_column("Default", style="green")
+    table.add_column("Purpose")
+    excluded = {"run_command", "option_sources", "supercell_info"}
+    for name in WorkflowConfig.model_fields:
+        if name in excluded:
+            continue
+        table.add_row(
+            name,
+            _format_parameter_default(getattr(config, name)),
+            _PARAMETER_PURPOSES.get(name, "Workflow parameter."),
+        )
+    console.print(table)
+    console.print(
+        "Aliases: q_mesh -> mesh/kappa_mesh, dos_mesh -> mesh, "
+        "symprec -> phonopy_symprec, phono3py_fc2_asr -> phono3py_symmetrize_fc2."
+    )
 
 
 @app.callback()
@@ -34,11 +150,21 @@ def root(
         help="Show the installed PhonoFlow version and exit.",
         is_eager=True,
     ),
+    help_all: bool = typer.Option(
+        False,
+        "--help-all",
+        "--show-parameters",
+        help="Show all workflow parameters, defaults, and purposes, then exit.",
+        is_eager=True,
+    ),
 ) -> None:
     """PhonoFlow command-line interface."""
 
     if version:
         console.print(f"{PROJECT_NAME} {VERSION}")
+        raise typer.Exit()
+    if help_all:
+        _print_parameter_reference()
         raise typer.Exit()
 
 

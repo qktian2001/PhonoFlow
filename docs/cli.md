@@ -7,11 +7,14 @@ the PhonoFlow 1.0 command-line surface implemented in `src/phonoflow/cli.py`.
 
 ```bash
 phonoflow version
+phonoflow --help-all
 phonoflow doctor --verbose
 ```
 
-`doctor` checks core packages and optional backend modules. Use it before a
-production run when Calorine, Phono3py, HiPhive, or DeepMD behavior matters.
+`--help-all` prints the current workflow parameters, defaults, and purposes from
+the command-line runtime. `doctor` checks core packages and optional backend
+modules. Use it before a production run when Calorine, Phono3py, HiPhive, or
+DeepMD behavior matters.
 
 ## Config Template
 
