@@ -1304,8 +1304,25 @@ def _build_resolved_settings(
     )
     settings.add("force_backend", config.backend, "auto")
     settings.add("force_model_path", config.model_path, source("model_path"))
-    settings.add("relax_backend", config.relax_backend, source("relax_backend"))
-    settings.add("relax_model_path", config.relax_model_path, source("relax_model_path"))
+    resolved_relax_backend = _resolved_relax_backend_name(config)
+    resolved_relax_model_path = _resolved_relax_model_path(config)
+    settings.add("relax_backend_requested", config.relax_backend, source("relax_backend"))
+    settings.add(
+        "relax_backend_resolved",
+        resolved_relax_backend,
+        source("relax_backend", auto=config.relax and config.relax_backend == "auto"),
+        "DPA/DeepMD relaxation defaults to NEP89/Calorine"
+        if config.backend == "deepmd" and config.relax and resolved_relax_backend == "calorine"
+        else "",
+    )
+    settings.add(
+        "relax_model_path",
+        resolved_relax_model_path,
+        source(
+            "relax_model_path",
+            auto=bool(config.relax and config.backend == "deepmd" and requested_config.relax_model_path is None),
+        ),
+    )
     settings.add("allow_dpa_relax", config.allow_dpa_relax, source("allow_dpa_relax"))
     settings.add("relax", config.relax, source("relax"))
     settings.add("relax_cell", config.relax_cell if config.relax else False, source("relax_cell"))
@@ -1488,6 +1505,8 @@ def _resolved_workflow_details(config: WorkflowConfig, requested_config: Workflo
         f"phono3py_symmetrize_fc3: {config.phono3py_symmetrize_fc3}",
         f"relax requested: {config.relax}",
         f"relax backend requested: {config.relax_backend}",
+        f"relax backend resolved: {_resolved_relax_backend_name(config)}",
+        f"relax model path: {_resolved_relax_model_path(config) or 'none'}",
         f"output directory: {outdir}",
     ]
     if config.backend == "deepmd":

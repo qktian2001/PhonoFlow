@@ -269,7 +269,7 @@ def test_single_cli_output_includes_traceable_steps(tmp_path: Path, monkeypatch:
     assert result.exit_code == 0, result.output
     assert "[1/8] Reading input structure" in result.output
     assert "[2/8] Resolving default settings" in result.output
-    assert "Resolved PhonoFlow settings" in result.output
+    assert result.output.count("Resolved PhonoFlow settings") == 1
     assert "backend: dpa3 -> deepmd" in result.output
     assert "supercell:" in result.output
     assert "phono3py_symmetrize_fc2: True" in result.output
@@ -395,3 +395,7 @@ def test_dpa_relax_dry_run_records_force_and_relax_models_separately(
     assert data["relax_backend"] == "calorine"
     assert data["relax_model_path"] == str(nep89_model)
     assert data["relax_enabled"] is True
+    settings = json.loads((outdir / "resolved_settings.json").read_text(encoding="utf-8"))
+    assert settings["relax_backend_requested"]["value"] == "auto"
+    assert settings["relax_backend_resolved"]["value"] == "calorine"
+    assert settings["relax_model_path"]["value"] == str(nep89_model)

@@ -60,8 +60,9 @@ class ResolvedSettings:
         """Render the settings table as plain terminal text for run artifacts."""
 
         console = Console(record=True, width=132, color_system=None)
-        console.print(self._table())
-        return console.export_text()
+        with console.capture() as capture:
+            console.print(self._table())
+        return capture.get()
 
     def write_table(self, path: Path) -> str:
         """Write and return the rendered settings table."""
