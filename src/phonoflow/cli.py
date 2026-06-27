@@ -17,6 +17,7 @@ from rich.table import Table
 from phonoflow.config import WorkflowConfig, default_config_dict, load_config, merge_overrides, write_config
 from phonoflow.constants import PROJECT_NAME, VERSION
 from phonoflow.exceptions import PhonoFlowError
+from phonoflow.runtime_warnings import install_optional_deepmd_cuda_probe_warning_filter
 
 app = typer.Typer(
     help="PhonoFlow phonon and lattice thermal-transport workflow.",
@@ -1549,6 +1550,7 @@ def main() -> Any:
     """Console script entry point."""
 
     sys.argv = _preprocess_auto_triplet_options(sys.argv)
+    install_optional_deepmd_cuda_probe_warning_filter()
     return app()
 
 
