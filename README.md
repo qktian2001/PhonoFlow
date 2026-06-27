@@ -84,25 +84,21 @@ Generate a complete example config:
 phonoflow init-config --out config.yaml
 ```
 
-Use `run` when you want a direct CLI command: every `run` example requires
-`--input-path` and `--model-path`. Use `single` when you want the same workflow
-but may also load a YAML config with `--config` and override selected settings
-from the CLI.
+Use `run` when you want the shortest direct CLI command. It requires only
+`--input-path` and `--model-path`; PhonoFlow infers the backend from the model
+file (`.txt` for NEP/NEP89 through Calorine, `.pt/.pth/.pb` for DeepMD/DPA) and
+uses automatic defaults for output directory, supercell, mesh, and harmonic
+phonon settings. Use `single` when you want the same workflow with a YAML
+config and explicit CLI overrides.
 
 ### NEP/NEP89 Workflows
 
-Harmonic phonons only, using `run` direct CLI mode:
+Harmonic phonons only, using minimal `run` direct CLI mode:
 
 ```bash
 phonoflow run \
   --input-path examples/Si.vasp \
-  --model-path /path/to/nep-model.txt \
-  --backend calorine \
-  --outdir work/nep_phonon \
-  --supercell-dim auto \
-  --mesh auto \
-  --relax \
-  --overwrite
+  --model-path /path/to/nep-model.txt
 ```
 
 Harmonic phonons only, using `single` config-compatible mode:
@@ -119,26 +115,8 @@ phonoflow single \
   --overwrite
 ```
 
-Thermal conductivity, using `run` direct CLI mode:
-
-```bash
-phonoflow run \
-  --input-path examples/Si.vasp \
-  --model-path /path/to/nep-model.txt \
-  --backend calorine \
-  --outdir work/nep_kappa \
-  --supercell-dim auto \
-  --mesh auto \
-  --compute-kappa \
-  --fc3-method finite-displacement \
-  --fc3-supercell-dim auto \
-  --kappa-mesh auto \
-  --method rta \
-  --temperatures 300 \
-  --overwrite
-```
-
-Thermal conductivity, using `single` config-compatible mode:
+Thermal conductivity, using `single` with explicit second- and third-order
+settings:
 
 ```bash
 phonoflow single \
@@ -159,17 +137,12 @@ phonoflow single \
 
 ### DPA/DeepMD Workflows
 
-Harmonic phonons only, using `run` direct CLI mode:
+Harmonic phonons only, using minimal `run` direct CLI mode:
 
 ```bash
 phonoflow run \
   --input-path examples/Si.vasp \
-  --model-path /path/to/DPA4-Neo-OMat24-v20260528_rc.pt \
-  --backend dpa4neo \
-  --outdir work/dpa_phonon \
-  --supercell-dim auto \
-  --mesh auto \
-  --overwrite
+  --model-path /path/to/DPA4-Neo-OMat24-v20260528_rc.pt
 ```
 
 Harmonic phonons only, using `single` config-compatible mode:
@@ -185,26 +158,8 @@ phonoflow single \
   --overwrite
 ```
 
-Thermal conductivity, using `run` direct CLI mode:
-
-```bash
-phonoflow run \
-  --input-path examples/Si.vasp \
-  --model-path /path/to/DPA4-Neo-OMat24-v20260528_rc.pt \
-  --backend dpa4neo \
-  --outdir work/dpa_kappa \
-  --supercell-dim auto \
-  --mesh auto \
-  --compute-kappa \
-  --fc3-method finite-displacement \
-  --fc3-supercell-dim auto \
-  --kappa-mesh auto \
-  --method rta \
-  --temperatures 300 \
-  --overwrite
-```
-
-Thermal conductivity, using `single` config-compatible mode:
+Thermal conductivity, using `single` with explicit second- and third-order
+settings:
 
 ```bash
 phonoflow single \
@@ -258,9 +213,8 @@ phonoflow compare-models \
 - `phonoflow init-config`: write a full YAML configuration template.
 - `phonoflow single`: run one workflow from an optional YAML config plus CLI
   overrides.
-- `phonoflow run`: run one structure directly from CLI options with required
-  `--input-path` and `--model-path`; this is the simplest production entry
-  point.
+- `phonoflow run`: run one structure directly from the required `--input-path`
+  and `--model-path`, with backend and workflow defaults inferred automatically.
 - `phonoflow compare-models`: run one to three model workflows and compare
   outputs.
 - `phonoflow read-result`: summarize an existing `result.json`.

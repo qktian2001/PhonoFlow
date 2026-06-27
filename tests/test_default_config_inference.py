@@ -41,6 +41,46 @@ def test_infer_default_config_outdir_and_defaults(monkeypatch):
     assert config.max_steps == 2000
 
 
+def test_auto_backend_infers_registered_dpa_from_model_path():
+    atoms = bulk("Si", "diamond", a=5.43)
+    model = Path("models/DPA-3.2-5M.pt")
+
+    config = infer_default_config(
+        atoms=atoms,
+        input_path=Path("examples/Si.vasp"),
+        model_path=model,
+        user_config=WorkflowConfig(input_path=Path("examples/Si.vasp"), model_path=model),
+    )
+
+    assert config.backend == "deepmd"
+    assert config.backend_alias == "dpa32"
+    assert config.dpa_model_name == "DPA-3.2-5M.pt"
+    assert config.deepmd_model_head == "OMat24"
+    assert config.model_path == model
+    assert config.relax is False
+    assert config.outdir == Path("results") / "Si_dpa32"
+
+
+def test_auto_backend_infers_generic_deepmd_from_model_path():
+    atoms = bulk("Si", "diamond", a=5.43)
+    model = Path("models/custom-dpa-ft.pth")
+
+    config = infer_default_config(
+        atoms=atoms,
+        input_path=Path("examples/Si.vasp"),
+        model_path=model,
+        user_config=WorkflowConfig(input_path=Path("examples/Si.vasp"), model_path=model),
+    )
+
+    assert config.backend == "deepmd"
+    assert config.backend_alias == "dpa"
+    assert config.dpa_model_name == "custom-dpa-ft.pth"
+    assert config.deepmd_model_head is None
+    assert config.model_path == model
+    assert config.relax is False
+    assert config.outdir == Path("results") / "Si_dpa"
+
+
 def test_backend_auto_selection_prefers_calorine(monkeypatch):
     class AvailableCalorine:
         def check_available(self):

@@ -61,6 +61,7 @@ DPA_MODEL_REGISTRY: dict[str, dict[str, Any]] = {
     },
 }
 DPA_BACKEND_ALIASES = {"dpa", *DPA_MODEL_ALIASES, *DPA_MODEL_REGISTRY}
+DEEPMD_MODEL_SUFFIXES = {".pb", ".pt", ".pth"}
 
 
 def canonical_dpa_alias(alias: str) -> str:
@@ -68,6 +69,24 @@ def canonical_dpa_alias(alias: str) -> str:
 
     normalized = str(alias).strip().lower()
     return DPA_MODEL_ALIASES.get(normalized, normalized)
+
+
+def dpa_alias_from_model_path(model_path: Path) -> str | None:
+    """Return a registered DPA alias when a model filename is recognized."""
+
+    filename = Path(model_path).name.lower()
+    for alias, spec in DPA_MODEL_REGISTRY.items():
+        if filename == str(spec["filename"]).lower():
+            return alias
+    return None
+
+
+def is_deepmd_model_path(model_path: Path | None) -> bool:
+    """Return True when a model path looks like a DeepMD/DPA model file."""
+
+    if model_path is None:
+        return False
+    return Path(model_path).suffix.lower() in DEEPMD_MODEL_SUFFIXES
 
 
 def discover_bundled_dpa_models() -> list[dict[str, Any]]:
@@ -161,13 +180,19 @@ def infer_default_config(
     """Resolve auto/default workflow settings from structure and user config."""
 
     requested_backend = user_config.backend.lower()
-    backend_resolved = resolve_backend_name(requested_backend)
+    auto_dpa_resolution: DPAModelResolution | None = None
+    if requested_backend == "auto" and is_deepmd_model_path(model_path):
+        auto_dpa_alias = dpa_alias_from_model_path(Path(model_path)) or "dpa"
+        auto_dpa_resolution = resolve_dpa_model_path(auto_dpa_alias, model_path)
+        backend_resolved = "deepmd"
+    else:
+        backend_resolved = resolve_backend_name(requested_backend)
     backend_alias = user_config.backend_alias or requested_backend
     dpa_model_name = user_config.dpa_model_name
     deepmd_model_head = user_config.deepmd_model_head
     resolved_model_path = model_path
-    if requested_backend in DPA_BACKEND_ALIASES:
-        dpa_resolution = resolve_dpa_model_path(requested_backend, model_path)
+    if requested_backend in DPA_BACKEND_ALIASES or auto_dpa_resolution is not None:
+        dpa_resolution = auto_dpa_resolution or resolve_dpa_model_path(requested_backend, model_path)
         backend_alias = dpa_resolution.backend_alias
         dpa_model_name = dpa_resolution.model_name
         resolved_model_path = dpa_resolution.model_path
@@ -179,7 +204,7 @@ def infer_default_config(
         outdir = Path("results") / f"{safe_stem(input_path)}_{outdir_label}"
 
     option_sources = set(user_config.option_sources)
-    dpa_requested = requested_backend in DPA_BACKEND_ALIASES
+    dpa_requested = requested_backend in DPA_BACKEND_ALIASES or auto_dpa_resolution is not None
     structure_classification = classify_structure_type(atoms)
     supercell_dim = user_config.supercell_dim
     supercell_info: dict[str, Any] = {}

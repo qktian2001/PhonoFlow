@@ -174,6 +174,36 @@ def test_dpa_dry_run_result_records_alias_model_name_and_hash(tmp_path: Path, mo
     assert "--deepmd-model-head OMat24" in run_command
 
 
+def test_run_cli_auto_detects_dpa_model_path_without_backend(tmp_path: Path) -> None:
+    model = tmp_path / "DPA-3.2-5M.pt"
+    model.write_bytes(b"dpa3")
+    outdir = tmp_path / "run-dpa-auto"
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "run",
+            "--input-path",
+            str(Path(__file__).resolve().parents[1] / "examples" / "Si.vasp"),
+            "--model-path",
+            str(model),
+            "--outdir",
+            str(outdir),
+            "--dry-run",
+            "--overwrite",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    data = json.loads((outdir / "result.json").read_text(encoding="utf-8"))
+    assert data["backend_requested"] == "auto"
+    assert data["backend_resolved"] == "deepmd"
+    assert data["backend_alias"] == "dpa32"
+    assert data["dpa_model_name"] == "DPA-3.2-5M.pt"
+    assert data["deepmd_model_head"] == "OMat24"
+    assert data["model_path"] == str(model)
+
+
 def test_single_cli_accepts_explicit_deepmd_model_head(tmp_path: Path) -> None:
     model = tmp_path / "custom-multitask.pt"
     model.write_bytes(b"model")
