@@ -46,23 +46,297 @@ configuration.
 
 ## Install
 
-Use Python 3.10 or newer.
+PhonoFlow is a Python command-line package. Python 3.10 or newer is required;
+Python 3.11 is a good default for a fresh environment. Linux or WSL is
+recommended for production runs, especially for DeepMD/DPA, Phono3py, HiPhive,
+and WTE workflows.
+
+### 1. Get the Source Code
+
+```bash
+git clone https://github.com/qktian2001/PhonoFlow.git
+cd PhonoFlow
+```
+
+### 2. Create a Clean Python Environment
+
+Conda or mamba is recommended because scientific Python, Phono3py, DeepMD-kit,
+and compiled optional dependencies are easier to keep isolated.
+
+```bash
+conda create -n phonoflow python=3.11 pip git -c conda-forge
+conda activate phonoflow
+python -m pip install --upgrade pip setuptools wheel
+```
+
+On Ubuntu/WSL, install basic build tools if pip has to build any dependency from
+source:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y build-essential git
+```
+
+### 3. Install the Core CLI
+
+This installs the PhonoFlow console command plus the core dependencies declared
+in `pyproject.toml`: NumPy, SciPy, pandas, matplotlib, ASE, Phonopy, spglib,
+SeekPath, Pydantic, Typer, Rich, and PyYAML.
 
 ```bash
 python -m pip install -e .
-python -m pip install -e ".[dev]"
 ```
 
-Optional extras:
+Verify the baseline command-line installation:
+
+```bash
+phonoflow --help
+phonoflow version
+phonoflow doctor --verbose
+```
+
+The baseline install supports the `dummy` backend and command/config
+validation. Real NEP, thermal-conductivity, HiPhive, WTE, and DPA/DeepMD runs
+need the optional stacks below.
+
+### 4. Install Developer Tools
+
+Install this when you want to run the public test suite or contribute changes:
+
+```bash
+python -m pip install -e ".[dev]"
+python -m pytest tests -q
+```
+
+### 5. Install NEP/NEP89 Support with Calorine CPUNEP
+
+Calorine CPUNEP is the production backend used by PhonoFlow for NEP/NEP89 model
+files such as `nep89_20250409.txt`.
 
 ```bash
 python -m pip install -e ".[calorine]"
+```
+
+Check that the API required by PhonoFlow is importable:
+
+```bash
+python - <<'PY'
+from calorine.calculators import CPUNEP
+print("Calorine CPUNEP import OK")
+PY
+
+phonoflow doctor --verbose
+```
+
+Run a NEP/NEP89 calculation by passing your own potential file:
+
+```bash
+phonoflow run \
+  --input-path examples/Si.vasp \
+  --model-path /path/to/nep-model.txt
+```
+
+### 6. Install Thermal-Conductivity Support
+
+Thermal conductivity, FC3 finite displacements, Phono3py RTA/LBTE, kappa HDF5
+parsing, and lifetime extraction require the `thermal` extra:
+
+```bash
 python -m pip install -e ".[thermal]"
+```
+
+Verify Phono3py and HDF5 support:
+
+```bash
+python - <<'PY'
+import h5py
+import phono3py
+print("phono3py", phono3py.__version__)
+print("h5py", h5py.__version__)
+PY
+```
+
+Example finite-displacement thermal run:
+
+```bash
+phonoflow single \
+  --input-path examples/Si.vasp \
+  --model-path /path/to/nep-model.txt \
+  --backend calorine \
+  --outdir work/nep_kappa \
+  --compute-kappa \
+  --fc3-method finite-displacement \
+  --fc3-supercell-dim auto \
+  --kappa-mesh auto \
+  --method rta \
+  --temperatures 300 \
+  --overwrite
+```
+
+### 7. Install HiPhive FC3 Fitting Support
+
+HiPhive is optional. Use it when you want `--fc3-method hiphive` instead of
+direct Phono3py finite-displacement FC3 generation.
+
+```bash
 python -m pip install -e ".[hiphive]"
 ```
 
-DeepMD/DPA runs require a compatible DeepMD-kit installation and user-provided
-model files.
+Verify the import:
+
+```bash
+python - <<'PY'
+import hiphive
+print("hiphive import OK")
+PY
+```
+
+Example HiPhive thermal run:
+
+```bash
+phonoflow single \
+  --input-path examples/Si.vasp \
+  --model-path /path/to/nep-model.txt \
+  --backend calorine \
+  --outdir work/nep_hiphive_kappa \
+  --compute-kappa \
+  --fc3-method hiphive \
+  --n-structures 200 \
+  --rattle-std 0.02 \
+  --cutoffs 5.0 4.0 \
+  --kappa-mesh auto \
+  --method rta \
+  --temperatures 300 \
+  --overwrite
+```
+
+### 8. Install DeepMD-kit for DPA/DeepMD Models
+
+DPA and DeepMD workflows are available through the `deepmd` backend and DPA
+aliases (`dpa31`, `dpa32`, `dpa33`, `dpa4neo`) when DeepMD-kit is installed and
+you provide compatible model files (`.pt`, `.pth`, or `.pb`). DeepMD-kit is not
+declared as a PhonoFlow extra because CPU/GPU, CUDA, MPI, PyTorch, and DPA model
+compatibility must match the user's environment.
+
+For a CPU-oriented environment, start with:
+
+```bash
+python -m pip install deepmd-kit
+```
+
+For GPU/CUDA DPA runs, install the DeepMD-kit build that matches your CUDA,
+driver, PyTorch, MPI, and model requirements. If you see messages such as
+`Cannot find libcudart.so.12`, the DeepMD-kit build expects a CUDA runtime that
+is not visible in the current environment; either install the matching CUDA
+runtime or use a CPU-compatible DeepMD-kit build.
+
+Verify the DeepMD ASE calculator used by PhonoFlow:
+
+```bash
+python - <<'PY'
+from deepmd.calculator import DP
+print("DeepMD DP calculator import OK")
+PY
+```
+
+Example DPA/DeepMD run:
+
+```bash
+phonoflow run \
+  --input-path examples/Si.vasp \
+  --model-path /path/to/DPA4-Neo-OMat24-v20260528_rc.pt
+```
+
+For explicit DPA options:
+
+```bash
+phonoflow single \
+  --input-path examples/Si.vasp \
+  --model-path /path/to/DPA4-Neo-OMat24-v20260528_rc.pt \
+  --backend dpa4neo \
+  --deepmd-device cpu \
+  --outdir work/dpa_phonon \
+  --overwrite
+```
+
+PhonoFlow defaults DPA/DeepMD structure relaxation to NEP89/Calorine when
+relaxation is enabled, unless you explicitly request DPA relaxation with
+`--allow-dpa-relax`. For DPA-only environments, use `--no-relax` or provide a
+valid NEP/NEP89 relaxation model through the relevant relax options.
+
+### 9. Install WTE / Wigner Transport Support
+
+Wigner transport is optional and is requested with `--wigner true`. PhonoFlow
+uses the external `phono3py-wte` plugin and checks that the plugin registers
+`wte-rta` and `wte-lbte` with Phono3py before enabling WTE.
+
+Install Phono3py first:
+
+```bash
+python -m pip install -e ".[thermal]"
+```
+
+Then install the WTE plugin from source in the same Python environment:
+
+```bash
+mkdir -p .vendor
+git clone https://github.com/MSimoncelli/phono3py-wte.git .vendor/phono3py-wte
+python -m pip install -e .vendor/phono3py-wte
+```
+
+If the WTE plugin source you use needs compatibility edits for your Phonopy or
+Phono3py version, apply them before the editable install. Verify that PhonoFlow
+sees WTE as available:
+
+```bash
+python - <<'PY'
+from phonoflow.thermal.wte_backend import get_wte_backend_capability
+capability = get_wte_backend_capability()
+print(capability["available"])
+print(capability.get("registered_methods"))
+PY
+```
+
+Example WTE run:
+
+```bash
+phonoflow single \
+  --input-path examples/Si.vasp \
+  --model-path /path/to/nep-model.txt \
+  --backend calorine \
+  --outdir work/nep_wte \
+  --compute-kappa \
+  --wigner true \
+  --method rta \
+  --temperatures 300 \
+  --overwrite
+```
+
+### 10. GPUMD Status
+
+PhonoFlow 1.0 includes a GPUMD-oriented backend module and `phonoflow doctor`
+checks whether the `gpumd` executable is on `PATH`, but real GPUMD force
+evaluation and relaxation are not implemented in this public CLI release.
+
+```bash
+which gpumd || echo "gpumd command not on PATH"
+phonoflow doctor --verbose
+```
+
+### 11. Recommended Complete Install
+
+For NEP/NEP89 phonons, finite-displacement thermal conductivity, HiPhive, tests,
+and docs validation in one environment:
+
+```bash
+python -m pip install -e ".[dev,calorine,thermal,hiphive]"
+phonoflow doctor --verbose
+python -m pytest tests -q
+```
+
+Add DeepMD-kit and phono3py-wte only when you need DPA/DeepMD or Wigner
+transport. Model files are not included in the public repository; pass your own
+NEP/NEP89 or DeepMD/DPA model with `--model-path`.
 
 Calorine CPUNEP is used for NEP/NEP89 workflows; DPA/DeepMD workflows are
 available through the DeepMD backend and DPA model aliases.
