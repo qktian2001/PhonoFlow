@@ -84,9 +84,14 @@ Generate a complete example config:
 phonoflow init-config --out config.yaml
 ```
 
+Use `run` when you want a direct CLI command: every `run` example requires
+`--input-path` and `--model-path`. Use `single` when you want the same workflow
+but may also load a YAML config with `--config` and override selected settings
+from the CLI.
+
 ### NEP/NEP89 Workflows
 
-Harmonic phonons only, using `run`:
+Harmonic phonons only, using `run` direct CLI mode:
 
 ```bash
 phonoflow run \
@@ -100,7 +105,7 @@ phonoflow run \
   --overwrite
 ```
 
-Harmonic phonons only, using `single`:
+Harmonic phonons only, using `single` config-compatible mode:
 
 ```bash
 phonoflow single \
@@ -114,7 +119,7 @@ phonoflow single \
   --overwrite
 ```
 
-Thermal conductivity, using `run`:
+Thermal conductivity, using `run` direct CLI mode:
 
 ```bash
 phonoflow run \
@@ -133,7 +138,7 @@ phonoflow run \
   --overwrite
 ```
 
-Thermal conductivity, using `single`:
+Thermal conductivity, using `single` config-compatible mode:
 
 ```bash
 phonoflow single \
@@ -154,7 +159,7 @@ phonoflow single \
 
 ### DPA/DeepMD Workflows
 
-Harmonic phonons only, using `run`:
+Harmonic phonons only, using `run` direct CLI mode:
 
 ```bash
 phonoflow run \
@@ -167,7 +172,7 @@ phonoflow run \
   --overwrite
 ```
 
-Harmonic phonons only, using `single`:
+Harmonic phonons only, using `single` config-compatible mode:
 
 ```bash
 phonoflow single \
@@ -180,7 +185,7 @@ phonoflow single \
   --overwrite
 ```
 
-Thermal conductivity, using `run`:
+Thermal conductivity, using `run` direct CLI mode:
 
 ```bash
 phonoflow run \
@@ -199,7 +204,7 @@ phonoflow run \
   --overwrite
 ```
 
-Thermal conductivity, using `single`:
+Thermal conductivity, using `single` config-compatible mode:
 
 ```bash
 phonoflow single \
@@ -251,9 +256,11 @@ phonoflow compare-models \
   purposes.
 - `phonoflow doctor`: check required and optional runtime dependencies.
 - `phonoflow init-config`: write a full YAML configuration template.
-- `phonoflow single`: run from a YAML config plus CLI overrides.
-- `phonoflow run`: run one structure with required `--input-path` and
-  `--model-path`; this is the simplest production entry point.
+- `phonoflow single`: run one workflow from an optional YAML config plus CLI
+  overrides.
+- `phonoflow run`: run one structure directly from CLI options with required
+  `--input-path` and `--model-path`; this is the simplest production entry
+  point.
 - `phonoflow compare-models`: run one to three model workflows and compare
   outputs.
 - `phonoflow read-result`: summarize an existing `result.json`.
