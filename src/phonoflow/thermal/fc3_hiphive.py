@@ -14,7 +14,7 @@ from ase.calculators.singlepoint import SinglePointCalculator
 from phonopy import Phonopy
 
 from phonoflow.calculators.base import CalculatorBackend
-from phonoflow.config import WorkflowConfig, resolve_common_q_mesh
+from phonoflow.config import WorkflowConfig, resolve_kappa_mesh
 from phonoflow.defaults import infer_supercell_dim
 from phonoflow.thermal.config import unavailable_thermal_result
 from phonoflow.thermal.kappa_io import (
@@ -33,6 +33,7 @@ from phonoflow.thermal.fc3_finite_displacement import (
 )
 from phonoflow.thermal.wte_backend import get_wte_backend_capability
 from phonoflow.workflow.displace import ase_atoms_to_phonopy_atoms, phonopy_atoms_to_ase_atoms
+from phonoflow.workflow.force_eval import evaluate_forces_for_displacements
 
 
 def run_hiphive_kappa_workflow(
@@ -157,10 +158,21 @@ def run_hiphive_kappa_workflow(
 
         structure_container = StructureContainer(cluster_space)
         force_rmse_samples: list[float] = []
-        for index, structure in enumerate(training_structures, start=1):
-            _log(log, f"Evaluating HiPhive training structure {index}/{len(training_structures)}")
-            force_result = backend.calculate_energy_forces(structure)
-            forces = np.asarray(force_result["forces"], dtype=float)
+        hiphive_force_result = evaluate_forces_for_displacements(
+            list(training_structures),
+            backend=backend,
+            backend_name=getattr(backend, "name", "custom"),
+            model_path=config.model_path,
+            config=config,
+            force_workers=config.force_workers,
+            force_parallel_backend=config.force_parallel_backend,
+            deepmd_device=config.deepmd_device,
+            log=log,
+            audit_label="hiphive",
+        )
+        warnings.extend(hiphive_force_result.warnings)
+        for structure, force_array in zip(training_structures, hiphive_force_result.forces, strict=True):
+            forces = np.asarray(force_array, dtype=float)
             structure.arrays["forces"] = forces
             structure.calc = SinglePointCalculator(structure, forces=forces)
             force_rmse_samples.append(float(np.sqrt(np.mean(forces**2))))
@@ -261,6 +273,10 @@ def run_hiphive_kappa_workflow(
         )
         phono3py.fc2 = fc2
         phono3py.fc3 = fc3
+        phono3py_params_path = outdir / "phono3py_params.yaml"
+        _save_phono3py_params(phono3py, phono3py_params_path)
+        phono3py_yaml_path = outdir / "phono3py.yaml"
+        _save_phono3py_params(phono3py, phono3py_yaml_path)
         hiphive_symmetrization_info = _hiphive_symmetrization_info(config)
         fc3_seconds = time.perf_counter() - fc3_started
         thermal_started = time.perf_counter()
@@ -303,6 +319,8 @@ def run_hiphive_kappa_workflow(
         files: dict[str, Any] = {
             "fc2_hdf5": fc2_path.name,
             "fc3_hdf5": fc3_path.name,
+            "phono3py_params_yaml": phono3py_params_path.name,
+            "phono3py_yaml": phono3py_yaml_path.name,
             "kappa_hdf5": kappa_path.name,
             "thermal_conductivity_csv": thermal_csv.name,
             "thermal_conductivity_png": thermal_png.name,
@@ -378,6 +396,13 @@ def run_hiphive_kappa_workflow(
             "timing_breakdown": {
                 "fc3_seconds": round(fc3_seconds, 6),
                 "thermal_lifetime_seconds": round(thermal_seconds, 6),
+                "fc3_force_workers": hiphive_force_result.metadata.get("effective_force_workers"),
+                "fc3_wall_time": hiphive_force_result.metadata.get("wall_time"),
+                "fc3_displacements_per_second": hiphive_force_result.metadata.get("displacements_per_second"),
+                "force_parallel_backend": hiphive_force_result.metadata.get("force_parallel_backend"),
+                "deepmd_torch_threads": config.deepmd_torch_threads,
+                "deepmd_deterministic": config.deepmd_deterministic,
+                "effective_cpu_parallelism": hiphive_force_result.metadata.get("effective_cpu_parallelism"),
             },
             "warnings": warnings,
             "reason": None,
@@ -754,7 +779,7 @@ def _hiphive_symmetrization_info(config: WorkflowConfig) -> dict[str, Any]:
 
 
 def _resolve_kappa_mesh(config: WorkflowConfig) -> list[int]:
-    return resolve_common_q_mesh(config.mesh, config.kappa_mesh)
+    return resolve_kappa_mesh(config.mesh, config.kappa_mesh)
 
 
 def _resolve_transport_type(config: WorkflowConfig, wte_capability: dict[str, Any] | None = None) -> str | None:
@@ -787,6 +812,13 @@ def _working_directory(path: Path) -> Any:
         yield
     finally:
         os.chdir(old)
+
+
+def _save_phono3py_params(phono3py: Any, path: Path) -> None:
+    try:
+        phono3py.save(filename=str(path))
+    except Exception:
+        path.write_text("# phono3py parameter export unavailable for this phono3py version\n", encoding="utf-8")
 
 
 def _log(log: Callable[[str], None] | None, message: str) -> None:

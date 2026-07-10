@@ -22,12 +22,25 @@ configuration.
   Calorine CPUNEP, optional `deepmd` and DPA aliases when DeepMD-kit is
   installed, plus a GPUMD-oriented backend module.
 - Automatic defaults for supercells and q meshes, with explicit CLI/config
-  overrides for production calculations.
+  overrides for production calculations. FC2 and FC3 auto supercells now obey
+  both the target length and the default 200-atom cap; cubic cells keep equal
+  multipliers when possible.
+- Independent harmonic/DOS and thermal meshes: `--mesh auto` resolves the
+  Phonopy/DOS mesh, while `--kappa-mesh auto` resolves the Phono3py
+  thermal-conductivity mesh.
+- Local CPU scheduling for finite-displacement force evaluation:
+  `--force-workers`, `--force-parallel-backend`, `--force-chunk-size`, and the
+  optional file-locked `--cpu-queue` help control CPU usage without changing
+  the physical model.
 - Multi-model comparison through `compare-models`, including shared workflow
   settings and per-model backend/model paths.
 - Reproducibility artifacts: resolved settings, command record, timing,
   structure provenance, space-group report, force-audit diagnostics, JSON/text
   summaries, and optional FC2 text exports.
+- Origin/direct/process force-evaluation modes are available for comparison and
+  debugging: `origin` preserves the original Phono3py-style FC3 force loop,
+  `direct` runs PhonoFlow's no-process path, and `process` enables
+  process-level displacement parallelism.
 
 ## Repository Layout
 
@@ -358,6 +371,19 @@ Generate a complete example config:
 phonoflow init-config --out config.yaml
 ```
 
+Important current defaults:
+
+- `--mesh auto` controls the harmonic Phonopy/DOS mesh and resolves to the core
+  3D default `21 21 21` unless slab/vacuum detection selects a 2D-style mesh.
+- `--kappa-mesh auto` controls the Phono3py thermal-conductivity mesh and
+  resolves to the core default `11 11 11`.
+- FC2 `--supercell-dim auto` uses `--target-supercell-length` with the default
+  200-atom auto-supercell cap.
+- FC3 `--fc3-supercell-dim auto` uses `--fc3-target-supercell-length` with the
+  default 200-atom auto-supercell cap.
+- For cubic cells, automatic FC2/FC3 supercells keep the three multipliers equal
+  when that satisfies the length and atom-count constraints.
+
 Use `run` when you want the shortest direct CLI command. It requires only
 `--input-path` and `--model-path`; PhonoFlow infers the backend from the model
 file (`.txt` for NEP/NEP89 through Calorine, `.pt/.pth/.pb` for DeepMD/DPA) and
@@ -404,6 +430,9 @@ phonoflow single \
   --fc3-method finite-displacement \
   --fc3-supercell-dim auto \
   --kappa-mesh auto \
+  --force-workers 24 \
+  --force-parallel-backend process \
+  --force-chunk-size 1 \
   --method rta \
   --temperatures 300 \
   --overwrite
@@ -447,9 +476,42 @@ phonoflow single \
   --fc3-method finite-displacement \
   --fc3-supercell-dim auto \
   --kappa-mesh auto \
+  --force-workers 24 \
+  --force-parallel-backend process \
+  --force-chunk-size 1 \
+  --deepmd-device cpu \
+  --deepmd-torch-threads 1 \
   --method rta \
   --temperatures 300 \
   --overwrite
+```
+
+For a 36-core workstation, a common single-job starting point is:
+
+```bash
+--force-workers 36 --force-parallel-backend process --force-chunk-size 1
+```
+
+For CPU DeepMD/DPA runs, start with one Torch thread per force worker:
+
+```bash
+--deepmd-device cpu --deepmd-torch-threads 1
+```
+
+These resource flags change scheduling and throughput only; they are not
+scientific model parameters.
+
+To compare scheduling paths on a small system, use:
+
+```bash
+# Original Phono3py-style FC3 force loop, useful as a reference baseline.
+--force-parallel-backend origin --force-workers 1
+
+# PhonoFlow direct no-process path.
+--force-parallel-backend direct --force-workers 1
+
+# PhonoFlow process-level displacement parallelism.
+--force-parallel-backend process --force-workers 24 --force-chunk-size 1
 ```
 
 ### Compare Models
@@ -478,6 +540,46 @@ phonoflow compare-models \
   --overwrite
 ```
 
+Compare runs accept the same thermal and force-scheduling controls used by
+`single`, and apply them to each child workflow:
+
+```bash
+phonoflow compare-models \
+  --input-path examples/Si.vasp \
+  --outdir work/compare_kappa \
+  --model-label nep89 --backend calorine --model-path /path/to/nep-model.txt \
+  --model-label dpa4neo --backend dpa4neo --model-path /path/to/DPA4-Neo-OMat24-v20260528_rc.pt \
+  --compute-kappa \
+  --mesh auto \
+  --kappa-mesh auto \
+  --method rta \
+  --temperatures 300 \
+  --force-workers 24 \
+  --force-parallel-backend process \
+  --force-chunk-size 1 \
+  --deepmd-device cpu \
+  --deepmd-torch-threads 1 \
+  --overwrite
+```
+
+When several local CLI jobs need to share one workstation, the optional CPU
+queue can reserve file-locked local CPU slots before the workflow starts:
+
+```bash
+phonoflow single \
+  --input-path examples/Si.vasp \
+  --model-path /path/to/nep-model.txt \
+  --compute-kappa \
+  --cpu-queue \
+  --cpu-queue-total-slots 36 \
+  --cpu-queue-max-running-jobs 2 \
+  --cpu-queue-job-slots 18 \
+  --force-workers 18 \
+  --force-parallel-backend process \
+  --force-chunk-size 1 \
+  --overwrite
+```
+
 ## Commands
 
 - `phonoflow version`: print the package version.
@@ -494,12 +596,30 @@ phonoflow compare-models \
 - `phonoflow read-result`: summarize an existing `result.json`.
 - `phonoflow batch`: batch workflow skeleton for a directory of structures.
 
+Local resource controls available on `single`, `run`, and `compare-models`
+include:
+
+- `--force-workers`: number of displaced structures evaluated concurrently.
+- `--force-parallel-backend`: `origin`, `direct`, `serial`, `process`, or
+  `worker_queue`.
+- `--force-chunk-size`: scheduler chunk size; for current NEP/Calorine and
+  CPU DeepMD/DPA FC3 force loops, `1` is the recommended starting point.
+- `--force-max-pending-tasks`: bound queued scheduler work when enabled.
+- `--deepmd-device`, `--deepmd-torch-threads`, and
+  `--deepmd-deterministic`: DeepMD/DPA runtime controls.
+- `--cpu-queue`, `--cpu-queue-total-slots`,
+  `--cpu-queue-max-running-jobs`, `--cpu-queue-job-slots`,
+  `--cpu-queue-state-dir`, and `--cpu-queue-timeout`: optional local CPU slot
+  reservation before a CLI workflow starts.
+
 ## Documentation
 
 - [Docs index](docs/index.md)
 - [CLI reference](docs/cli.md)
 - [Configuration reference](docs/configuration.md)
 - [Output files](docs/outputs.md)
+- [CPU queue scheduler](docs/cpu_queue_scheduler.md)
+- [FC3 displacement acceleration](docs/fc3_displacement_acceleration.md)
 - [Architecture](docs/architecture.md)
 - [Testing](docs/testing.md)
 

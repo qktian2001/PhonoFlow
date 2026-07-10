@@ -12,7 +12,7 @@ from typing import Any, Callable
 import numpy as np
 
 from phonoflow.calculators.base import CalculatorBackend
-from phonoflow.config import WorkflowConfig, resolve_common_q_mesh
+from phonoflow.config import WorkflowConfig, resolve_kappa_mesh
 from phonoflow.defaults import infer_supercell_dim
 from phonoflow.thermal.config import unavailable_thermal_result
 from phonoflow.thermal.kappa_io import (
@@ -26,6 +26,8 @@ from phonoflow.thermal.plots import plot_thermal_conductivity
 from phonoflow.thermal.wte_backend import get_wte_backend_capability
 from phonoflow.workflow.force_audit import build_force_audit_record, write_force_audit_files
 from phonoflow.workflow.displace import ase_atoms_to_phonopy_atoms, phonopy_atoms_to_ase_atoms
+from phonoflow.workflow.force_eval import evaluate_forces_for_displacements
+from phonoflow_scheduler.force_tasks import ForceDisplacementSpec
 
 
 def run_finite_displacement_kappa_workflow(
@@ -159,20 +161,24 @@ def run_finite_displacement_kappa_workflow(
         if not fc2_supercells:
             raise RuntimeError("phono3py did not generate FC2 displaced supercells.")
 
-        phono3py.forces = _evaluate_phono3py_forces(
+        fc3_force_result = _evaluate_phono3py_forces(
             fc3_supercells,
             backend,
+            config,
             log,
             label="FC3",
             audit_outdir=outdir if config.save_force_audit else None,
         )
-        phono3py.phonon_forces = _evaluate_phono3py_forces(
+        phono3py.forces = fc3_force_result["forces"]
+        fc2_force_result = _evaluate_phono3py_forces(
             fc2_supercells,
             backend,
+            config,
             log,
             label="FC2",
             audit_outdir=outdir if config.save_force_audit else None,
         )
+        phono3py.phonon_forces = fc2_force_result["forces"]
         _log(log, "Producing phono3py FC3 and FC2")
         phono3py.produce_fc3()
         phono3py.produce_fc2()
@@ -189,6 +195,8 @@ def run_finite_displacement_kappa_workflow(
         write_fc2_to_hdf5(phono3py.fc2, filename=str(fc2_path))
         phono3py_params_path = outdir / "phono3py_params.yaml"
         _save_phono3py_params(phono3py, phono3py_params_path)
+        phono3py_yaml_path = outdir / "phono3py.yaml"
+        _save_phono3py_params(phono3py, phono3py_yaml_path)
         fc3_seconds = time.perf_counter() - fc3_started
 
         thermal_started = time.perf_counter()
@@ -243,6 +251,7 @@ def run_finite_displacement_kappa_workflow(
             "fc2_hdf5": fc2_path.name,
             "fc3_hdf5": fc3_path.name,
             "phono3py_params_yaml": phono3py_params_path.name,
+            "phono3py_yaml": phono3py_yaml_path.name,
             "kappa_hdf5": kappa_path.name,
             "thermal_conductivity_csv": thermal_csv.name,
             "thermal_conductivity_png": thermal_png.name,
@@ -300,8 +309,18 @@ def run_finite_displacement_kappa_workflow(
             "timing_breakdown": {
                 "fc3_seconds": round(fc3_seconds, 6),
                 "thermal_lifetime_seconds": round(thermal_seconds, 6),
+                "fc3_force_workers": fc3_force_result["metadata"].get("effective_force_workers"),
+                "fc3_wall_time": fc3_force_result["metadata"].get("wall_time"),
+                "fc3_displacements_per_second": fc3_force_result["metadata"].get("displacements_per_second"),
+                "fc2_force_workers": fc2_force_result["metadata"].get("effective_force_workers"),
+                "fc2_wall_time": fc2_force_result["metadata"].get("wall_time"),
+                "fc2_displacements_per_second": fc2_force_result["metadata"].get("displacements_per_second"),
+                "force_parallel_backend": fc3_force_result["metadata"].get("force_parallel_backend"),
+                "deepmd_torch_threads": config.deepmd_torch_threads,
+                "deepmd_deterministic": config.deepmd_deterministic,
+                "effective_cpu_parallelism": fc3_force_result["metadata"].get("effective_cpu_parallelism"),
             },
-            "warnings": warnings,
+            "warnings": [*warnings, *fc3_force_result["warnings"], *fc2_force_result["warnings"]],
             "reason": None,
         }
     except Exception as exc:
@@ -341,10 +360,50 @@ def run_finite_displacement_kappa_workflow(
 def _evaluate_phono3py_forces(
     supercells: list[Any],
     backend: CalculatorBackend,
+    config: WorkflowConfig,
     log: Callable[[str], None] | None,
     label: str,
     audit_outdir: Path | None = None,
-) -> np.ndarray:
+) -> dict[str, Any]:
+    if str(config.force_parallel_backend).lower() == "origin":
+        return _evaluate_phono3py_forces_origin(
+            supercells,
+            backend,
+            log,
+            label=label,
+            audit_outdir=audit_outdir,
+        )
+    payloads, base_atoms = _force_payloads_for_phono3py_supercells(supercells, compact=label.lower() == "fc3")
+    result = evaluate_forces_for_displacements(
+        payloads,
+        backend=backend,
+        backend_name=getattr(backend, "name", "custom"),
+        model_path=config.model_path,
+        config=config,
+        force_workers=config.force_workers,
+        force_parallel_backend=config.force_parallel_backend,
+        deepmd_device=config.deepmd_device,
+        log=log,
+        audit_outdir=audit_outdir,
+        audit_label=label.lower(),
+        base_atoms=base_atoms,
+    )
+    return {
+        "forces": np.asarray(result.forces, dtype=float),
+        "metadata": result.metadata,
+        "warnings": result.warnings,
+    }
+
+
+def _evaluate_phono3py_forces_origin(
+    supercells: list[Any],
+    backend: CalculatorBackend,
+    log: Callable[[str], None] | None,
+    *,
+    label: str,
+    audit_outdir: Path | None = None,
+) -> dict[str, Any]:
+    started = time.perf_counter()
     forces = []
     audit_records: list[dict[str, Any]] = []
     total = len(supercells)
@@ -366,7 +425,35 @@ def _evaluate_phono3py_forces(
     raw = np.asarray(forces, dtype=float)
     if audit_outdir is not None:
         write_force_audit_files(audit_outdir, label.lower(), audit_records, raw)
-    return raw
+    wall_time = max(0.0, time.perf_counter() - started)
+    dps = float(total / wall_time) if wall_time > 0 else None
+    return {
+        "forces": raw,
+        "metadata": {
+            "n_displacements": total,
+            "force_parallel_backend": "origin",
+            "requested_force_workers": 1,
+            "effective_force_workers": 1,
+            "chunk_size": None,
+            "wall_time": wall_time,
+            "displacements_per_second": dps,
+            "origin_no_scheduler": True,
+        },
+        "warnings": [],
+    }
+
+
+def _force_payloads_for_phono3py_supercells(supercells: list[Any], *, compact: bool) -> tuple[list[Any], Any | None]:
+    if not compact:
+        return [phonopy_atoms_to_ase_atoms(supercell) for supercell in supercells], None
+    if not supercells:
+        return [], None
+    base_atoms = phonopy_atoms_to_ase_atoms(supercells[0])
+    payloads = [
+        ForceDisplacementSpec.from_atoms(phonopy_atoms_to_ase_atoms(supercell))
+        for supercell in supercells
+    ]
+    return payloads, base_atoms
 
 
 def _write_fd_diagnostics(
@@ -480,7 +567,7 @@ def _resolve_fc3_supercell_dim(atoms: Any, config: WorkflowConfig) -> list[int]:
 
 
 def _resolve_kappa_mesh(config: WorkflowConfig) -> list[int]:
-    return resolve_common_q_mesh(config.mesh, config.kappa_mesh)
+    return resolve_kappa_mesh(config.mesh, config.kappa_mesh)
 
 
 def _resolve_phono3py_symprec(config: WorkflowConfig) -> float:

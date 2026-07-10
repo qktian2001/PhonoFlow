@@ -116,6 +116,63 @@ def test_dpa4neo_backend_sets_default_inference_batch_size(
     assert __import__("os").environ["DP_INFER_BATCH_SIZE"] == "64"
 
 
+def test_deepmd_deterministic_forces_torch_threads_to_one(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[str, int]] = []
+
+    class FakeTorch:
+        @staticmethod
+        def set_num_threads(value: int) -> None:
+            calls.append(("threads", value))
+
+        @staticmethod
+        def set_num_interop_threads(value: int) -> None:
+            calls.append(("interop", value))
+
+        @staticmethod
+        def use_deterministic_algorithms(value: bool) -> None:
+            calls.append(("deterministic", int(value)))
+
+        @staticmethod
+        def get_num_threads() -> int:
+            return 1
+
+    monkeypatch.setitem(sys.modules, "torch", FakeTorch)
+    backend = get_backend("deepmd")
+
+    backend.apply_config(WorkflowConfig(backend="deepmd", deepmd_deterministic=True, deepmd_torch_threads=8))
+
+    assert ("threads", 1) in calls
+    assert any("deterministic mode is enabled" in warning for warning in backend.deterministic_warnings)
+    assert backend.runtime_thread_info["actual_torch_num_threads"] == 1
+
+
+def test_deepmd_non_deterministic_uses_explicit_torch_threads(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[str, int]] = []
+
+    class FakeTorch:
+        @staticmethod
+        def set_num_threads(value: int) -> None:
+            calls.append(("threads", value))
+
+        @staticmethod
+        def set_num_interop_threads(value: int) -> None:
+            calls.append(("interop", value))
+
+        @staticmethod
+        def get_num_threads() -> int:
+            thread_calls = [value for name, value in calls if name == "threads"]
+            return thread_calls[-1] if thread_calls else 0
+
+    monkeypatch.setitem(sys.modules, "torch", FakeTorch)
+    backend = get_backend("deepmd")
+
+    backend.apply_config(WorkflowConfig(backend="deepmd", deepmd_deterministic=False, deepmd_torch_threads=6))
+
+    assert ("threads", 6) in calls
+    assert ("interop", 6) in calls
+    assert backend.runtime_thread_info["actual_torch_num_threads"] == 6
+
+
 def test_deepmd_backend_validates_missing_model_path() -> None:
     backend = get_backend("deepmd")
     with pytest.raises(ConfigError, match="requires --model-path"):

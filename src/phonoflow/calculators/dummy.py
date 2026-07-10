@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import time
 from typing import Any
 
 import numpy as np
@@ -20,6 +21,9 @@ class DummyBackend(CalculatorBackend):
         return True
 
     def calculate_energy_forces(self, atoms: Any) -> dict[str, Any]:
+        delay = atoms.info.get("phonoflow_dummy_force_sleep_seconds", 0.0)
+        if delay:
+            time.sleep(float(delay))
         n_atoms = len(atoms)
         return {"energy": 0.0, "forces": np.zeros((n_atoms, 3), dtype=float)}
 

@@ -4,6 +4,8 @@ from pathlib import Path
 
 from ase import Atoms
 from ase.build import bulk
+import pytest
+from pydantic import ValidationError
 
 from phonoflow.config import WorkflowConfig
 from phonoflow.defaults import infer_default_config
@@ -12,7 +14,7 @@ from phonoflow.thermal.kappa_io import select_kappa_hdf5_path
 from phonoflow.workflow.phonon import _run_total_dos
 
 
-def test_infer_default_config_unifies_default_q_mesh() -> None:
+def test_infer_default_config_keeps_default_dos_and_kappa_meshes_independent() -> None:
     config = infer_default_config(
         atoms=bulk("Si", "diamond", a=5.43),
         input_path=Path("examples/Si.vasp"),
@@ -26,7 +28,7 @@ def test_infer_default_config_unifies_default_q_mesh() -> None:
     )
 
     assert config.mesh == [21, 21, 21]
-    assert config.kappa_mesh == [21, 21, 21]
+    assert config.kappa_mesh == [11, 11, 11]
 
 
 def test_infer_default_config_uses_2d_q_mesh_for_c_axis_vacuum() -> None:
@@ -50,10 +52,10 @@ def test_infer_default_config_uses_2d_q_mesh_for_c_axis_vacuum() -> None:
     )
 
     assert config.mesh == [51, 51, 1]
-    assert config.kappa_mesh == [51, 51, 1]
+    assert config.kappa_mesh == [11, 11, 11]
 
 
-def test_explicit_q_mesh_is_not_overridden_by_2d_default() -> None:
+def test_explicit_mesh_is_not_overridden_by_2d_default() -> None:
     atoms = Atoms(
         "Si2",
         cell=[3.8, 3.8, 25.0],
@@ -75,10 +77,15 @@ def test_explicit_q_mesh_is_not_overridden_by_2d_default() -> None:
     )
 
     assert config.mesh == [9, 9, 3]
-    assert config.kappa_mesh == [9, 9, 3]
+    assert config.kappa_mesh == [11, 11, 11]
 
 
-def test_explicit_kappa_mesh_alias_populates_common_q_mesh() -> None:
+def test_legacy_q_mesh_parameter_is_rejected() -> None:
+    with pytest.raises(ValidationError, match="q_mesh"):
+        WorkflowConfig(q_mesh=[7, 7, 7])
+
+
+def test_explicit_kappa_mesh_does_not_override_dos_mesh() -> None:
     config = infer_default_config(
         atoms=bulk("Si", "diamond", a=5.43),
         input_path=Path("examples/Si.vasp"),
@@ -93,9 +100,16 @@ def test_explicit_kappa_mesh_alias_populates_common_q_mesh() -> None:
         ),
     )
 
-    assert config.mesh == [7, 7, 7]
+    assert config.mesh == [21, 21, 21]
     assert config.kappa_mesh == [7, 7, 7]
     assert resolve_fd_kappa_mesh(config) == [7, 7, 7]
+
+
+def test_explicit_mesh_and_kappa_mesh_remain_independent() -> None:
+    config = WorkflowConfig(mesh=[21, 21, 21], kappa_mesh=[11, 11, 11])
+
+    assert config.mesh == [21, 21, 21]
+    assert config.kappa_mesh == [11, 11, 11]
 
 
 def test_run_total_dos_uses_gamma_centered_q_mesh(monkeypatch, tmp_path: Path) -> None:

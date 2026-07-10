@@ -7,6 +7,7 @@ import json
 import platform
 import shutil
 import sys
+import uuid
 from pathlib import Path
 from typing import Any, Optional, Tuple
 
@@ -35,7 +36,7 @@ _PARAMETER_PURPOSES: dict[str, str] = {
     "backend_alias": "Optional backend alias metadata.",
     "dpa_model_name": "Optional named DPA model selector.",
     "supercell_dim": "FC2 supercell dimensions or automatic inference.",
-    "mesh": "Harmonic/DOS q mesh; q_mesh is accepted as an alias.",
+    "mesh": "Harmonic/DOS q mesh.",
     "target_supercell_length": "Target length for automatic FC2 supercell inference.",
     "min_supercell_dim": "Minimum automatic FC2 multiplier.",
     "max_supercell_dim": "Maximum automatic FC2 multiplier.",
@@ -82,7 +83,19 @@ _PARAMETER_PURPOSES: dict[str, str] = {
     "deepmd_force_backend": "DeepMD force path: ASE or DeepPot direct.",
     "deepmd_device": "DeepMD runtime device.",
     "deepmd_model_head": "Optional multitask DeepMD model head.",
+    "deepmd_torch_threads": "Torch intra-op threads per DeepMD force worker.",
     "deepmd_deterministic": "Best-effort deterministic DeepMD environment.",
+    "max_concurrent_jobs": "Maximum concurrently running Web jobs recorded for resource accounting.",
+    "batch_workers": "CLI batch worker count recorded for resource accounting.",
+    "force_workers": "Number of displaced structures evaluated concurrently within one job.",
+    "force_parallel_backend": "Force-loop parallel backend: serial or process.",
+    "cpu_queue_enabled": "Enable the optional PBS-style local CPU slot queue.",
+    "cpu_queue_total_slots": "Total local CPU slots managed by the optional CPU queue.",
+    "cpu_queue_max_running_jobs": "Maximum jobs allowed to hold CPU queue leases at once.",
+    "cpu_queue_job_slots": "CPU slots requested by this CLI job.",
+    "cpu_queue_state_dir": "State directory for the file-locked CPU queue.",
+    "cpu_queue_timeout": "Maximum seconds to wait for a CPU queue lease.",
+    "auto_cpu_budget": "Record estimated CPU budget and oversubscription warnings.",
     "save_force_audit": "Save finite-displacement force diagnostics.",
     "n_structures": "HiPhive rattle structure count.",
     "rattle_std": "HiPhive rattle standard deviation.",
@@ -107,6 +120,59 @@ _PARAMETER_PURPOSES: dict[str, str] = {
     "resume": "Reuse complete successful outputs.",
     "log_level": "Logging verbosity.",
 }
+
+
+def _run_single_workflow_with_optional_cpu_queue(workflow_config: WorkflowConfig) -> dict[str, Any]:
+    """Run one workflow, optionally acquiring a local CPU-slot lease first."""
+
+    if not workflow_config.cpu_queue_enabled:
+        from phonoflow.workflow.pipeline import run_single_workflow
+
+        return run_single_workflow(workflow_config)
+
+    from phonoflow.workflow.pipeline import run_single_workflow
+    from phonoflow_scheduler.cpu_queue import cpu_job_guard, get_cpu_queue, submit_cpu_job
+    from phonoflow_scheduler.cpu_queue_config import CpuQueueConfig
+
+    queue_config = CpuQueueConfig.from_values(
+        enabled=True,
+        total_cpu_slots=workflow_config.cpu_queue_total_slots,
+        max_running_jobs=workflow_config.cpu_queue_max_running_jobs,
+        default_job_cpu_slots=workflow_config.cpu_queue_job_slots,
+        max_job_cpu_slots=workflow_config.cpu_queue_job_slots,
+        acquire_timeout_s=workflow_config.cpu_queue_timeout,
+        state_dir=workflow_config.cpu_queue_state_dir,
+        admin_managed=False,
+    )
+    job_id = f"cli_{uuid.uuid4().hex[:12]}"
+    queue = get_cpu_queue(queue_config)
+    submit_cpu_job(
+        queue,
+        job_id=job_id,
+        user_id="cli",
+        requested_slots=workflow_config.cpu_queue_job_slots,
+        reason="PhonoFlow CLI workflow",
+        owner="cli",
+    )
+    with cpu_job_guard(queue, job_id, timeout_s=workflow_config.cpu_queue_timeout) as lease:
+        queue_limited = workflow_config.model_copy(deep=True)
+        allocated_slots = int(lease.allocated_slots)
+        if workflow_config.option_sources.get("force_workers") == "user":
+            queue_limited.force_workers = min(int(queue_limited.force_workers), allocated_slots)
+        else:
+            queue_limited.force_workers = allocated_slots
+        if queue_limited.force_workers > 1 and queue_limited.force_parallel_backend == "serial":
+            queue_limited.force_parallel_backend = "process"
+        queue_limited.supercell_info["cpu_queue"] = {
+            "enabled": True,
+            "job_id": job_id,
+            "lease_id": lease.lease_id,
+            "allocated_cpu_slots": lease.allocated_slots,
+            "requested_cpu_slots": workflow_config.cpu_queue_job_slots,
+            "total_cpu_slots": queue_config.total_cpu_slots,
+            "max_running_jobs": queue_config.max_running_jobs,
+        }
+        return run_single_workflow(queue_limited)
 
 
 def _format_parameter_default(value: Any) -> str:
@@ -138,7 +204,7 @@ def _print_parameter_reference() -> None:
         )
     console.print(table)
     console.print(
-        "Aliases: q_mesh -> mesh/kappa_mesh, dos_mesh -> mesh, "
+        "Legacy config aliases: dos_mesh -> mesh, "
         "symprec -> phonopy_symprec, phono3py_fc2_asr -> phono3py_symmetrize_fc2."
     )
 
@@ -267,7 +333,7 @@ def _preprocess_auto_triplet_options(argv: list[str]) -> list[str]:
 
     output: list[str] = []
     index = 0
-    triplet_options = {"--supercell-dim", "--mesh", "--q-mesh", "--kappa-mesh", "--fc3-supercell-dim"}
+    triplet_options = {"--supercell-dim", "--mesh", "--kappa-mesh", "--fc3-supercell-dim"}
     while index < len(argv):
         item = argv[index]
         if item in triplet_options and index + 1 < len(argv) and argv[index + 1].lower() == "auto":
@@ -378,7 +444,7 @@ def single(
         None, "--target-supercell-length", help="Target auto supercell length in Angstrom."
     ),
     max_supercell_atoms: Optional[int] = typer.Option(
-        None, "--max-supercell-atoms", help="Maximum atoms allowed in an automatically inferred supercell."
+        None, "--max-supercell-atoms", help="Maximum atoms allowed in an automatically inferred FC2 supercell."
     ),
     min_supercell_dim: Optional[int] = typer.Option(
         None, "--min-supercell-dim", help="Minimum multiplier for each automatic supercell direction."
@@ -430,7 +496,6 @@ def single(
     mesh: Tuple[int, int, int] = typer.Option(
         (-1, -1, -1),
         "--mesh",
-        "--q-mesh",
         help="Phonopy mesh for DOS, e.g. --mesh 20 20 20 or --mesh auto.",
         show_default=False,
     ),
@@ -490,7 +555,7 @@ def single(
         None, "--fc3-target-supercell-length", help="Target auto FC3 supercell length in Angstrom."
     ),
     max_fc3_supercell_atoms: Optional[int] = typer.Option(
-        None, "--max-fc3-supercell-atoms", help="Maximum atoms allowed in an automatic FC3 supercell."
+        None, "--max-fc3-supercell-atoms", help="Maximum atoms allowed in an automatically inferred FC3 supercell."
     ),
     fc3_displacement: Optional[float] = typer.Option(None, "--fc3-displacement", help="FC3 displacement distance."),
     fc3_cutoff_pair_distance: Optional[float] = typer.Option(
@@ -552,6 +617,62 @@ def single(
     ),
     deepmd_model_head: Optional[str] = typer.Option(
         None, "--deepmd-model-head", help="DeepMD multitask model head, e.g. OMat24."
+    ),
+    deepmd_torch_threads: Optional[int] = typer.Option(
+        None,
+        "--deepmd-torch-threads",
+        help="Torch CPU threads per DeepMD force worker. Deterministic mode forces this to 1.",
+    ),
+    force_workers: Optional[int] = typer.Option(
+        None,
+        "--force-workers",
+        help="Number of displaced structures to evaluate concurrently inside one job.",
+    ),
+    force_parallel_backend: Optional[str] = typer.Option(
+        None,
+        "--force-parallel-backend",
+        help="Force-loop backend: direct, serial, process, or worker_queue.",
+    ),
+    force_chunk_size: Optional[int] = typer.Option(
+        None,
+        "--force-chunk-size",
+        help="Internal scheduler chunk size for displacement force tasks.",
+    ),
+    force_max_pending_tasks: Optional[int] = typer.Option(
+        None,
+        "--force-max-pending-tasks",
+        help="Internal scheduler bound for queued displacement force chunks.",
+    ),
+    cpu_queue_enabled: Optional[bool] = typer.Option(
+        None,
+        "--cpu-queue/--no-cpu-queue",
+        help="Enable the optional local CPU slot queue before running this workflow.",
+        show_default=False,
+    ),
+    cpu_queue_total_slots: Optional[int] = typer.Option(
+        None,
+        "--cpu-queue-total-slots",
+        help="Total CPU slots managed by the optional local queue.",
+    ),
+    cpu_queue_max_running_jobs: Optional[int] = typer.Option(
+        None,
+        "--cpu-queue-max-running-jobs",
+        help="Maximum jobs allowed to hold CPU queue leases at once.",
+    ),
+    cpu_queue_job_slots: Optional[int] = typer.Option(
+        None,
+        "--cpu-queue-job-slots",
+        help="CPU slots requested by this CLI job.",
+    ),
+    cpu_queue_state_dir: Optional[Path] = typer.Option(
+        None,
+        "--cpu-queue-state-dir",
+        help="State directory for the file-locked CPU queue.",
+    ),
+    cpu_queue_timeout: Optional[float] = typer.Option(
+        None,
+        "--cpu-queue-timeout",
+        help="Maximum seconds to wait for a CPU queue lease.",
     ),
     deepmd_deterministic: Optional[bool] = typer.Option(
         None,
@@ -658,6 +779,17 @@ def single(
             deepmd_force_backend=deepmd_force_backend,
             deepmd_device=deepmd_device,
             deepmd_model_head=deepmd_model_head,
+            deepmd_torch_threads=deepmd_torch_threads,
+            force_workers=force_workers,
+            force_parallel_backend=force_parallel_backend,
+            force_chunk_size=force_chunk_size,
+            force_max_pending_tasks=force_max_pending_tasks,
+            cpu_queue_enabled=cpu_queue_enabled,
+            cpu_queue_total_slots=cpu_queue_total_slots,
+            cpu_queue_max_running_jobs=cpu_queue_max_running_jobs,
+            cpu_queue_job_slots=cpu_queue_job_slots,
+            cpu_queue_state_dir=cpu_queue_state_dir,
+            cpu_queue_timeout=cpu_queue_timeout,
             deepmd_deterministic=deepmd_deterministic,
             save_force_audit=save_force_audit,
             n_structures=n_structures,
@@ -734,6 +866,17 @@ def single(
                 deepmd_force_backend=deepmd_force_backend,
                 deepmd_device=deepmd_device,
                 deepmd_model_head=deepmd_model_head,
+                deepmd_torch_threads=deepmd_torch_threads,
+                force_workers=force_workers,
+                force_parallel_backend=force_parallel_backend,
+                force_chunk_size=force_chunk_size,
+                force_max_pending_tasks=force_max_pending_tasks,
+                cpu_queue_enabled=cpu_queue_enabled,
+                cpu_queue_total_slots=cpu_queue_total_slots,
+                cpu_queue_max_running_jobs=cpu_queue_max_running_jobs,
+                cpu_queue_job_slots=cpu_queue_job_slots,
+                cpu_queue_state_dir=cpu_queue_state_dir,
+                cpu_queue_timeout=cpu_queue_timeout,
                 deepmd_deterministic=deepmd_deterministic,
                 save_force_audit=save_force_audit,
                 n_structures=n_structures,
@@ -755,9 +898,7 @@ def single(
                 log_level=log_level,
             ),
         )
-        from phonoflow.workflow.pipeline import run_single_workflow
-
-        result = run_single_workflow(workflow_config)
+        result = _run_single_workflow_with_optional_cpu_queue(workflow_config)
     except Exception as exc:
         _handle_error(exc)
 
@@ -816,7 +957,7 @@ def run(
         None, "--target-supercell-length", help="Target auto supercell length in Angstrom."
     ),
     max_supercell_atoms: Optional[int] = typer.Option(
-        None, "--max-supercell-atoms", help="Maximum atoms allowed in an automatically inferred supercell."
+        None, "--max-supercell-atoms", help="Maximum atoms allowed in an automatically inferred FC2 supercell."
     ),
     min_supercell_dim: Optional[int] = typer.Option(
         None, "--min-supercell-dim", help="Minimum multiplier for each automatic supercell direction."
@@ -880,7 +1021,7 @@ def run(
         None, "--fc3-target-supercell-length", help="Target auto FC3 supercell length in Angstrom."
     ),
     max_fc3_supercell_atoms: Optional[int] = typer.Option(
-        None, "--max-fc3-supercell-atoms", help="Maximum atoms allowed in an automatic FC3 supercell."
+        None, "--max-fc3-supercell-atoms", help="Maximum atoms allowed in an automatically inferred FC3 supercell."
     ),
     fc3_displacement: Optional[float] = typer.Option(None, "--fc3-displacement", help="FC3 displacement distance."),
     fc3_cutoff_pair_distance: Optional[float] = typer.Option(
@@ -942,6 +1083,62 @@ def run(
     ),
     deepmd_model_head: Optional[str] = typer.Option(
         None, "--deepmd-model-head", help="DeepMD multitask model head, e.g. OMat24."
+    ),
+    deepmd_torch_threads: Optional[int] = typer.Option(
+        None,
+        "--deepmd-torch-threads",
+        help="Torch CPU threads per DeepMD force worker. Deterministic mode forces this to 1.",
+    ),
+    force_workers: Optional[int] = typer.Option(
+        None,
+        "--force-workers",
+        help="Number of displaced structures to evaluate concurrently inside one job.",
+    ),
+    force_parallel_backend: Optional[str] = typer.Option(
+        None,
+        "--force-parallel-backend",
+        help="Force-loop backend: direct, serial, process, or worker_queue.",
+    ),
+    force_chunk_size: Optional[int] = typer.Option(
+        None,
+        "--force-chunk-size",
+        help="Internal scheduler chunk size for displacement force tasks.",
+    ),
+    force_max_pending_tasks: Optional[int] = typer.Option(
+        None,
+        "--force-max-pending-tasks",
+        help="Internal scheduler bound for queued displacement force chunks.",
+    ),
+    cpu_queue_enabled: Optional[bool] = typer.Option(
+        None,
+        "--cpu-queue/--no-cpu-queue",
+        help="Enable the optional local CPU slot queue before running this workflow.",
+        show_default=False,
+    ),
+    cpu_queue_total_slots: Optional[int] = typer.Option(
+        None,
+        "--cpu-queue-total-slots",
+        help="Total CPU slots managed by the optional local queue.",
+    ),
+    cpu_queue_max_running_jobs: Optional[int] = typer.Option(
+        None,
+        "--cpu-queue-max-running-jobs",
+        help="Maximum jobs allowed to hold CPU queue leases at once.",
+    ),
+    cpu_queue_job_slots: Optional[int] = typer.Option(
+        None,
+        "--cpu-queue-job-slots",
+        help="CPU slots requested by this CLI job.",
+    ),
+    cpu_queue_state_dir: Optional[Path] = typer.Option(
+        None,
+        "--cpu-queue-state-dir",
+        help="State directory for the file-locked CPU queue.",
+    ),
+    cpu_queue_timeout: Optional[float] = typer.Option(
+        None,
+        "--cpu-queue-timeout",
+        help="Maximum seconds to wait for a CPU queue lease.",
     ),
     deepmd_deterministic: Optional[bool] = typer.Option(
         None,
@@ -1023,6 +1220,17 @@ def run(
             deepmd_force_backend=deepmd_force_backend,
             deepmd_device=deepmd_device,
             deepmd_model_head=deepmd_model_head,
+            deepmd_torch_threads=deepmd_torch_threads,
+            force_workers=force_workers,
+            force_parallel_backend=force_parallel_backend,
+            force_chunk_size=force_chunk_size,
+            force_max_pending_tasks=force_max_pending_tasks,
+            cpu_queue_enabled=cpu_queue_enabled,
+            cpu_queue_total_slots=cpu_queue_total_slots,
+            cpu_queue_max_running_jobs=cpu_queue_max_running_jobs,
+            cpu_queue_job_slots=cpu_queue_job_slots,
+            cpu_queue_state_dir=cpu_queue_state_dir,
+            cpu_queue_timeout=cpu_queue_timeout,
             deepmd_deterministic=deepmd_deterministic,
             save_force_audit=save_force_audit,
             n_structures=n_structures,
@@ -1085,6 +1293,17 @@ def run(
                 deepmd_force_backend=deepmd_force_backend,
                 deepmd_device=deepmd_device,
                 deepmd_model_head=deepmd_model_head,
+                deepmd_torch_threads=deepmd_torch_threads,
+                force_workers=force_workers,
+                force_parallel_backend=force_parallel_backend,
+                force_chunk_size=force_chunk_size,
+                force_max_pending_tasks=force_max_pending_tasks,
+                cpu_queue_enabled=cpu_queue_enabled,
+                cpu_queue_total_slots=cpu_queue_total_slots,
+                cpu_queue_max_running_jobs=cpu_queue_max_running_jobs,
+                cpu_queue_job_slots=cpu_queue_job_slots,
+                cpu_queue_state_dir=cpu_queue_state_dir,
+                cpu_queue_timeout=cpu_queue_timeout,
                 deepmd_deterministic=deepmd_deterministic,
                 save_force_audit=save_force_audit,
                 n_structures=n_structures,
@@ -1097,9 +1316,7 @@ def run(
                 resume=resume or None,
             ),
         )
-        from phonoflow.workflow.pipeline import run_single_workflow
-
-        result = run_single_workflow(workflow_config)
+        result = _run_single_workflow_with_optional_cpu_queue(workflow_config)
     except Exception as exc:
         _handle_error(exc)
 
@@ -1147,14 +1364,13 @@ def compare_models_command(
     mesh: Tuple[int, int, int] = typer.Option(
         (-1, -1, -1),
         "--mesh",
-        "--q-mesh",
-        help="Common phonopy mesh, e.g. --mesh 20 20 20 or auto.",
+        help="Harmonic/DOS phonopy mesh, e.g. --mesh 20 20 20 or auto.",
         show_default=False,
     ),
     kappa_mesh: Tuple[int, int, int] = typer.Option(
         (-1, -1, -1),
         "--kappa-mesh",
-        help="Compatibility alias for the shared DOS/kappa q-mesh.",
+        help="Phono3py kappa mesh, independent from --mesh.",
         show_default=False,
     ),
     dry_run: bool = typer.Option(False, "--dry-run", help="Resolve settings without running phonons."),
@@ -1274,6 +1490,31 @@ def compare_models_command(
     deepmd_device: Optional[str] = typer.Option(
         None, "--deepmd-device", help="DeepMD device for DPA3/DPA4 children."
     ),
+    deepmd_torch_threads: Optional[int] = typer.Option(
+        None,
+        "--deepmd-torch-threads",
+        help="Torch CPU threads per DeepMD force worker for DPA children.",
+    ),
+    force_workers: Optional[int] = typer.Option(
+        None,
+        "--force-workers",
+        help="Number of displaced structures to evaluate concurrently in each child workflow.",
+    ),
+    force_parallel_backend: Optional[str] = typer.Option(
+        None,
+        "--force-parallel-backend",
+        help="Force-loop backend for child workflows: direct, serial, process, or worker_queue.",
+    ),
+    force_chunk_size: Optional[int] = typer.Option(
+        None,
+        "--force-chunk-size",
+        help="Internal scheduler chunk size for child displacement force tasks.",
+    ),
+    force_max_pending_tasks: Optional[int] = typer.Option(
+        None,
+        "--force-max-pending-tasks",
+        help="Internal scheduler bound for queued child displacement force chunks.",
+    ),
     deepmd_deterministic: Optional[bool] = typer.Option(
         None,
         "--deepmd-deterministic/--no-deepmd-deterministic",
@@ -1295,7 +1536,7 @@ def compare_models_command(
     dpa_safe_mode: bool = typer.Option(
         False,
         "--dpa-safe-mode",
-        help="Explicit DPA4 safety preset: 12 A target and 256-atom auto-supercell cap. Not a formal default.",
+        help="Explicit DPA4 safety preset: 12 A target and 200-atom auto-supercell cap. Not a formal default.",
     ),
 ) -> None:
     """Compare one to three independent model workflows on one structure."""
@@ -1348,6 +1589,11 @@ def compare_models_command(
             cutoffs=_optional_float_pair(cutoffs),
             min_dist=min_dist,
             deepmd_device=deepmd_device,
+            deepmd_torch_threads=deepmd_torch_threads,
+            force_workers=force_workers,
+            force_parallel_backend=force_parallel_backend,
+            force_chunk_size=force_chunk_size,
+            force_max_pending_tasks=force_max_pending_tasks,
             deepmd_deterministic=deepmd_deterministic,
             deepmd_reuse_calculator=deepmd_reuse_calculator,
             save_force_audit=save_force_audit,

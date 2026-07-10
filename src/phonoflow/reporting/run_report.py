@@ -98,7 +98,7 @@ def build_default_audit_table() -> list[dict[str, str]]:
             "Same auto-supercell target length.",
         ),
         _audit_row("fc3_supercell_dim", "auto", "auto", True, "Aligned with NEP89 FC3 auto policy."),
-        _audit_row("kappa_mesh", "auto", "auto", True, "Both resolve auto kappa mesh in the thermal backend."),
+        _audit_row("kappa_mesh", "auto", "auto", True, "Auto kappa mesh resolves independently in the thermal backend."),
         _audit_row("displacement", str(base.displacement), str(base.displacement), True, "Same FC2 displacement default."),
         _audit_row(
             "fc3_displacement",

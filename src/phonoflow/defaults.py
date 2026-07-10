@@ -11,7 +11,7 @@ import numpy as np
 
 from phonoflow.analysis.structure_type import classify_structure_type
 from phonoflow.calculators.calorine_backend import CalorineBackend
-from phonoflow.config import WorkflowConfig, resolve_common_q_mesh
+from phonoflow.config import WorkflowConfig, default_kappa_mesh, default_q_mesh_for_structure
 from phonoflow.exceptions import BackendUnavailableError, ConfigError
 from phonoflow.io.path_utils import safe_stem
 
@@ -229,10 +229,15 @@ def infer_default_config(
             source="user",
         )
 
-    mesh = resolve_common_q_mesh(
-        user_config.mesh,
-        user_config.kappa_mesh,
-        vacuum_like_directions=structure_classification.get("vacuum_like_directions", []),
+    mesh = (
+        [int(value) for value in user_config.mesh]
+        if isinstance(user_config.mesh, list)
+        else default_q_mesh_for_structure(structure_classification.get("vacuum_like_directions", []))
+    )
+    kappa_mesh = (
+        [int(value) for value in user_config.kappa_mesh]
+        if isinstance(user_config.kappa_mesh, list)
+        else default_kappa_mesh()
     )
 
     if backend_resolved != "dummy" and resolved_model_path is None:
@@ -248,7 +253,7 @@ def infer_default_config(
         "supercell_dim": supercell_dim,
         "supercell_info": supercell_info,
         "mesh": mesh,
-        "kappa_mesh": mesh,
+        "kappa_mesh": kappa_mesh,
     }
     if dpa_requested:
         if "relax" not in option_sources:
@@ -273,7 +278,7 @@ def infer_supercell_dim(
     target_supercell_length: float = 15.0,
     min_dim: int = 1,
     max_dim: int = 6,
-    max_supercell_atoms: int = 1000,
+    max_supercell_atoms: int = 200,
     vacuum_like_directions: list[str] | None = None,
 ) -> list[int]:
     """Infer a finite-displacement supercell dimension from cell lengths."""
@@ -293,7 +298,7 @@ def infer_supercell_info(
     target_supercell_length: float = 15.0,
     min_dim: int = 1,
     max_dim: int = 6,
-    max_supercell_atoms: int = 1000,
+    max_supercell_atoms: int = 200,
     vacuum_like_directions: list[str] | None = None,
 ) -> dict[str, Any]:
     """Infer supercell dimensions and return reproducibility diagnostics."""
@@ -303,25 +308,50 @@ def infer_supercell_info(
     vacuum_axes = {axis_map[axis] for axis in (vacuum_like_directions or []) if axis in axis_map}
     notes: list[str] = []
     warnings: list[str] = []
-    dims = []
-    for axis, length in enumerate(lengths):
-        if axis in vacuum_axes:
-            dims.append(1)
-            notes.append(
-                "Vacuum-like direction detected; auto supercell dimension along "
-                f"{['a', 'b', 'c'][axis]} was kept at 1."
-            )
-            continue
-        if length <= 0:
-            dims.append(min_dim)
-        else:
-            dims.append(int(np.clip(ceil(target_supercell_length / length), min_dim, max_dim)))
-
     n_atoms = len(atoms)
-    initial_dims = list(dims)
-    while int(np.prod(dims)) * n_atoms > max_supercell_atoms and max(dims) > min_dim:
-        largest_index = int(np.argmax(dims))
-        dims[largest_index] -= 1
+    active_axes = [axis for axis in range(3) if axis not in vacuum_axes]
+    equal_active_lengths = (
+        bool(active_axes)
+        and all(lengths[axis] > 0 for axis in active_axes)
+        and np.allclose(lengths[active_axes], lengths[active_axes][0], rtol=1e-5, atol=1e-8)
+    )
+    dims = []
+    initial_dims: list[int] | None = None
+    if equal_active_lengths:
+        initial_scalar = int(np.clip(ceil(target_supercell_length / float(lengths[active_axes][0])), min_dim, max_dim))
+        initial_dims = [1 if axis in vacuum_axes else initial_scalar for axis in range(3)]
+        scalar = initial_scalar
+        while int(scalar ** len(active_axes)) * n_atoms > max_supercell_atoms and scalar > min_dim:
+            scalar -= 1
+        for axis in range(3):
+            if axis in vacuum_axes:
+                dims.append(1)
+                notes.append(
+                    "Vacuum-like direction detected; auto supercell dimension along "
+                    f"{['a', 'b', 'c'][axis]} was kept at 1."
+                )
+            else:
+                dims.append(scalar)
+    else:
+        for axis, length in enumerate(lengths):
+            if axis in vacuum_axes:
+                dims.append(1)
+                notes.append(
+                    "Vacuum-like direction detected; auto supercell dimension along "
+                    f"{['a', 'b', 'c'][axis]} was kept at 1."
+                )
+                continue
+            if length <= 0:
+                dims.append(min_dim)
+            else:
+                dims.append(int(np.clip(ceil(target_supercell_length / length), min_dim, max_dim)))
+
+    if initial_dims is None:
+        initial_dims = list(dims)
+    if not equal_active_lengths:
+        while int(np.prod(dims)) * n_atoms > max_supercell_atoms and max(dims) > min_dim:
+            largest_index = int(np.argmax(dims))
+            dims[largest_index] -= 1
 
     supercell_lengths = (lengths * np.asarray(dims, dtype=float)).tolist()
     if dims != initial_dims:

@@ -40,6 +40,7 @@ from phonoflow.reporting.timing_statistics import (
     write_calculation_time_statistics,
 )
 from phonoflow.resolved_settings import ResolvedSettings, build_run_command
+from phonoflow.resources import estimate_cpu_budget
 from phonoflow.thermal import disabled_thermal_result, run_thermal_conductivity_workflow
 from phonoflow.thermal.wte_backend import get_wte_backend_capability
 from phonoflow.workflow.phonon import run_phonon_calculation
@@ -63,6 +64,33 @@ def _q_mesh_metadata(config: WorkflowConfig) -> dict[str, Any]:
 
 def _thermal_solver_flags(config: WorkflowConfig) -> list[str]:
     return ["--method", str(config.kappa_method)]
+
+
+def _resource_scheduling_metadata(config: WorkflowConfig) -> dict[str, Any]:
+    torch_threads = config.deepmd_torch_threads
+    if torch_threads is None:
+        torch_threads = 1 if config.force_workers > 1 else 1
+    budget = estimate_cpu_budget(
+        max_concurrent_jobs=config.max_concurrent_jobs,
+        batch_workers=config.batch_workers,
+        force_workers=config.force_workers,
+        deepmd_torch_threads=torch_threads,
+    )
+    return {
+        "max_concurrent_jobs": config.max_concurrent_jobs,
+        "batch_workers": config.batch_workers,
+        "force_workers": config.force_workers,
+        "force_parallel_backend": config.force_parallel_backend,
+        "deepmd_torch_threads": config.deepmd_torch_threads,
+        "auto_cpu_budget": config.auto_cpu_budget,
+        "resource_scheduling": {
+            "frontend": "cli",
+            "deepmd_device": config.deepmd_device,
+            "deepmd_deterministic": config.deepmd_deterministic,
+            **budget,
+        },
+        "resource_warnings": [budget["warning"]] if budget.get("warning") else [],
+    }
 
 
 def _relax_policy_metadata(
@@ -460,7 +488,7 @@ def run_single_workflow(config: WorkflowConfig) -> dict[str, Any]:
         requested_config=requested_config,
         outdir=outdir,
         relaxed_atoms=relaxed_atoms,
-            relax_info=relax_info,
+        relax_info=relax_info,
         start_time=start_time,
         resolved_settings=resolved_settings,
         structure_classification=structure_classification,
@@ -653,6 +681,8 @@ def _run_real_nep_single(
         "deepmd_force_backend": config.deepmd_force_backend if backend.name == "deepmd" else None,
         "deepmd_device": config.deepmd_device if backend.name == "deepmd" else None,
         "deepmd_model_head": config.deepmd_model_head if backend.name == "deepmd" else None,
+        "deepmd_torch_threads": config.deepmd_torch_threads if backend.name == "deepmd" else None,
+        "deepmd_runtime_thread_info": getattr(backend, "runtime_thread_info", {}) if backend.name == "deepmd" else {},
         "dp_infer_batch_size": _deepmd_infer_batch_size() if backend.name == "deepmd" else None,
         "deepmd_deterministic": bool(config.deepmd_deterministic) if backend.name == "deepmd" else None,
         "deepmd_deterministic_warnings": getattr(backend, "deterministic_warnings", []),
@@ -665,6 +695,7 @@ def _run_real_nep_single(
         "model_path": str(config.model_path),
         "force_backend": backend.name,
         "force_model_path": str(config.model_path),
+        **_resource_scheduling_metadata(config),
         "relax_backend": relax_info.get("relax_backend", "none"),
         "relax_model_path": relax_info.get("relax_model_path"),
         "relax_enabled": bool(config.relax),
@@ -952,6 +983,7 @@ def _run_dummy_single(
         "deepmd_force_backend": config.deepmd_force_backend if config.backend == "deepmd" else None,
         "deepmd_device": config.deepmd_device if config.backend == "deepmd" else None,
         "deepmd_model_head": config.deepmd_model_head if config.backend == "deepmd" else None,
+        "deepmd_torch_threads": config.deepmd_torch_threads if config.backend == "deepmd" else None,
         "dp_infer_batch_size": _deepmd_infer_batch_size() if config.backend == "deepmd" else None,
         "deepmd_deterministic": bool(config.deepmd_deterministic) if config.backend == "deepmd" else None,
         "deepmd_version": _package_version("deepmd-kit") if config.backend == "deepmd" else None,
@@ -963,6 +995,7 @@ def _run_dummy_single(
         "model_path": str(config.model_path) if config.model_path else None,
         "force_backend": config.backend,
         "force_model_path": str(config.model_path) if config.model_path else None,
+        **_resource_scheduling_metadata(config),
         "relax_backend": relax_info.get("relax_backend", "none"),
         "relax_model_path": relax_info.get("relax_model_path"),
         "relax_enabled": bool(config.relax),
@@ -1109,6 +1142,7 @@ def _build_dry_run_result(
         "deepmd_force_backend": config.deepmd_force_backend if config.backend == "deepmd" else None,
         "deepmd_device": config.deepmd_device if config.backend == "deepmd" else None,
         "deepmd_model_head": config.deepmd_model_head if config.backend == "deepmd" else None,
+        "deepmd_torch_threads": config.deepmd_torch_threads if config.backend == "deepmd" else None,
         "dp_infer_batch_size": _deepmd_infer_batch_size() if config.backend == "deepmd" else None,
         "deepmd_deterministic": bool(config.deepmd_deterministic) if config.backend == "deepmd" else None,
         "deepmd_version": _package_version("deepmd-kit") if config.backend == "deepmd" else None,
@@ -1120,6 +1154,7 @@ def _build_dry_run_result(
         "model_path": str(config.model_path) if config.model_path else None,
         "force_backend": config.backend,
         "force_model_path": str(config.model_path) if config.model_path else None,
+        **_resource_scheduling_metadata(config),
         "relax_backend": _resolved_relax_backend_name(config),
         "relax_model_path": _resolved_relax_model_path(config),
         "relax_enabled": bool(config.relax),
@@ -1414,8 +1449,8 @@ def _build_resolved_settings(
     settings.add(
         "q_mesh",
         config.mesh,
-        source("mesh", auto=requested_config.mesh == "auto" and requested_config.kappa_mesh == "auto"),
-        "gamma-centered for DOS and thermal conductivity",
+        source("mesh", auto=requested_config.mesh == "auto"),
+        "gamma-centered for DOS",
     )
     settings.add("q_mesh_centering", "gamma", "fixed")
     settings.add("asr", config.asr, source("asr"))
@@ -1427,7 +1462,7 @@ def _build_resolved_settings(
     settings.add("kappa_method", config.kappa_method, source("kappa_method"))
     settings.add("wigner", config.wigner, source("wigner"))
     settings.add("temperatures", config.temperatures, source("temperatures"))
-    settings.add("kappa_mesh", config.kappa_mesh, source("kappa_mesh"), "compatibility alias for q_mesh")
+    settings.add("kappa_mesh", config.kappa_mesh, source("kappa_mesh"), "phono3py thermal-conductivity mesh")
     settings.add("fc3_supercell_dim", config.fc3_supercell_dim, source("fc3_supercell_dim"))
     settings.add("fc3_target_supercell_length", config.fc3_target_supercell_length, source("fc3_target_supercell_length"))
     settings.add("max_fc3_supercell_atoms", config.max_fc3_supercell_atoms, source("max_fc3_supercell_atoms"))

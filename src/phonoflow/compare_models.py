@@ -23,7 +23,7 @@ from rich.console import Console
 import yaml
 
 from phonoflow.analysis.bandpath import DEFAULT_SEEKPATH_WITH_TIME_REVERSAL
-from phonoflow.config import WorkflowConfig, default_q_mesh
+from phonoflow.config import WorkflowConfig, default_kappa_mesh, default_q_mesh
 from phonoflow.band.io import load_band_yaml_segments
 from phonoflow.calculators import get_backend
 from phonoflow.defaults import (
@@ -182,6 +182,11 @@ def compare_models(
     cutoffs: list[float] | tuple[float, ...] | None = None,
     min_dist: float | None = None,
     deepmd_device: str | None = None,
+    deepmd_torch_threads: int | None = None,
+    force_workers: int | None = None,
+    force_parallel_backend: str | None = None,
+    force_chunk_size: int | None = None,
+    force_max_pending_tasks: int | None = None,
     deepmd_deterministic: bool | None = None,
     deepmd_reuse_calculator: bool | None = None,
     save_force_audit: bool | None = None,
@@ -216,7 +221,7 @@ def compare_models(
                 f"  - FC3 target: {fc3_target_supercell_length if fc3_target_supercell_length is not None else 10.0} Å",
                 f"  - kappa method: {kappa_method or 'rta'}",
                 f"  - temperatures: {temperatures if temperatures is not None else [300.0]}",
-                f"  - kappa mesh: {kappa_mesh if kappa_mesh is not None else (mesh if mesh is not None else default_q_mesh())}",
+                f"  - kappa mesh: {kappa_mesh if kappa_mesh is not None else default_kappa_mesh()}",
                 f"  - relax: {bool(relax)}",
                 f"  - relax_cell: {bool(relax_cell) if relax else False}",
                 f"  - dry_run: {bool(dry_run)}",
@@ -321,6 +326,11 @@ def compare_models(
             cutoffs=cutoffs,
             min_dist=min_dist,
             deepmd_device=deepmd_device,
+            deepmd_torch_threads=deepmd_torch_threads,
+            force_workers=force_workers,
+            force_parallel_backend=force_parallel_backend,
+            force_chunk_size=force_chunk_size,
+            force_max_pending_tasks=force_max_pending_tasks,
             deepmd_deterministic=deepmd_deterministic,
             deepmd_reuse_calculator=deepmd_reuse_calculator,
             save_force_audit=save_force_audit,
@@ -388,7 +398,7 @@ def compare_models(
             wigner=bool(wigner) if wigner is not None else False,
             temperatures=temperatures if temperatures is not None else [300.0],
             max_fc3_displacements=max_fc3_displacements,
-            max_supercell_atoms=256 if dpa_safe_mode and canonical_dpa_alias(str(spec["backend"])) == "dpa4neo" else 1000,
+            max_supercell_atoms=200,
             fmax=fmax if fmax is not None else 1e-5,
             max_steps=max_steps if max_steps is not None else 2000,
             primitive_matrix=primitive_matrix or "P",
@@ -410,6 +420,11 @@ def compare_models(
             cutoffs=[float(value) for value in cutoffs] if cutoffs is not None else [5.0, 4.0],
             min_dist=float(min_dist) if min_dist is not None else 1.8,
             deepmd_device=deepmd_device or "cpu",
+            deepmd_torch_threads=deepmd_torch_threads,
+            force_workers=force_workers if force_workers is not None else 1,
+            force_parallel_backend=force_parallel_backend or "serial",
+            force_chunk_size=force_chunk_size,
+            force_max_pending_tasks=force_max_pending_tasks,
             deepmd_deterministic=is_dpa if deepmd_deterministic is None else deepmd_deterministic,
             deepmd_reuse_calculator=True if deepmd_reuse_calculator is None else deepmd_reuse_calculator,
             save_force_audit=is_dpa if save_force_audit is None else save_force_audit,
@@ -502,7 +517,8 @@ def compare_models(
                 ],
             )
 
-    resolved_q_mesh = list(mesh or kappa_mesh) if (mesh is not None or kappa_mesh is not None) else default_q_mesh()
+    resolved_q_mesh = list(mesh) if mesh is not None else default_q_mesh()
+    resolved_kappa_mesh = list(kappa_mesh) if kappa_mesh is not None else default_kappa_mesh()
     q_mesh_used_for = ["dos"] if dos is not False else []
     if compute_kappa:
         q_mesh_used_for.append("kappa")
@@ -524,7 +540,8 @@ def compare_models(
         "temperatures": [float(value) for value in (temperatures if temperatures is not None else [300.0])],
         "solver_flags": ["--method", kappa_method or "rta"],
         "method_flags": ["--method", kappa_method or "rta"],
-        "phono3py_mesh": [int(value) for value in resolved_q_mesh],
+        "phono3py_mesh": [int(value) for value in resolved_kappa_mesh],
+        "kappa_mesh": [int(value) for value in resolved_kappa_mesh],
         "q_mesh": [int(value) for value in resolved_q_mesh],
         "q_mesh_centering": "gamma",
         "q_mesh_used_for": q_mesh_used_for or ["dos"],
@@ -661,6 +678,11 @@ def _model_command_text(
     cutoffs: list[float] | tuple[float, ...] | None = None,
     min_dist: float | None = None,
     deepmd_device: str | None = None,
+    deepmd_torch_threads: int | None = None,
+    force_workers: int | None = None,
+    force_parallel_backend: str | None = None,
+    force_chunk_size: int | None = None,
+    force_max_pending_tasks: int | None = None,
     deepmd_deterministic: bool | None = None,
     deepmd_reuse_calculator: bool | None = None,
     save_force_audit: bool | None = None,
@@ -709,6 +731,11 @@ def _model_command_text(
             cutoffs=cutoffs,
             min_dist=min_dist,
             deepmd_device=deepmd_device,
+            deepmd_torch_threads=deepmd_torch_threads,
+            force_workers=force_workers,
+            force_parallel_backend=force_parallel_backend,
+            force_chunk_size=force_chunk_size,
+            force_max_pending_tasks=force_max_pending_tasks,
             deepmd_deterministic=deepmd_deterministic,
             deepmd_reuse_calculator=deepmd_reuse_calculator,
             save_force_audit=save_force_audit,
@@ -760,6 +787,11 @@ def _model_command(
     cutoffs: list[float] | tuple[float, ...] | None = None,
     min_dist: float | None = None,
     deepmd_device: str | None = None,
+    deepmd_torch_threads: int | None = None,
+    force_workers: int | None = None,
+    force_parallel_backend: str | None = None,
+    force_chunk_size: int | None = None,
+    force_max_pending_tasks: int | None = None,
     deepmd_deterministic: bool | None = None,
     deepmd_reuse_calculator: bool | None = None,
     save_force_audit: bool | None = None,
@@ -785,17 +817,24 @@ def _model_command(
         command.extend(["--model-path", str(model_path)])
     if model_head is not None:
         command.extend(["--deepmd-model-head", str(model_head)])
+    if force_workers is not None:
+        command.extend(["--force-workers", str(int(force_workers))])
+    if force_parallel_backend is not None:
+        command.extend(["--force-parallel-backend", str(force_parallel_backend)])
+    if force_chunk_size is not None:
+        command.extend(["--force-chunk-size", str(int(force_chunk_size))])
+    if force_max_pending_tasks is not None:
+        command.extend(["--force-max-pending-tasks", str(int(force_max_pending_tasks))])
     if supercell_dim is not None:
         command.append("--supercell-dim")
         command.extend(str(item) for item in supercell_dim)
     else:
         command.extend(["--supercell-dim", "auto"])
-    common_q_mesh = mesh if mesh is not None else kappa_mesh if kappa_mesh is not None else None
     command.append("--mesh")
-    if common_q_mesh is None:
+    if mesh is None:
         command.append("auto")
     else:
-        command.extend(str(item) for item in common_q_mesh)
+        command.extend(str(item) for item in mesh)
     if dpa_safe_mode:
         command.extend(["--target-supercell-length", "12.0"])
     elif target_supercell_length is not None:
@@ -819,10 +858,10 @@ def _model_command(
         for temperature in temperatures if temperatures is not None else [300.0]:
             command.extend(["--temperatures", str(temperature)])
         command.append("--kappa-mesh")
-        if common_q_mesh is None:
+        if kappa_mesh is None:
             command.append("auto")
         else:
-            command.extend(str(item) for item in common_q_mesh)
+            command.extend(str(item) for item in kappa_mesh)
         if effective_fc3_method == "hiphive":
             if n_structures is not None:
                 command.extend(["--n-structures", str(n_structures)])
@@ -836,7 +875,7 @@ def _model_command(
     if max_fc3_displacements is not None:
         command.extend(["--max-fc3-displacements", str(max_fc3_displacements)])
     if dpa_safe_mode:
-        command.extend(["--max-supercell-atoms", "256"])
+        command.extend(["--max-supercell-atoms", "200"])
     if fmax is not None:
         command.extend(["--fmax", str(fmax)])
     if max_steps is not None:
@@ -865,6 +904,8 @@ def _model_command(
     if backend in DPA_BACKEND_ALIASES or backend == "deepmd":
         if deepmd_device is not None:
             command.extend(["--deepmd-device", str(deepmd_device)])
+        if deepmd_torch_threads is not None:
+            command.extend(["--deepmd-torch-threads", str(int(deepmd_torch_threads))])
         if deepmd_deterministic is not None:
             command.append("--deepmd-deterministic" if deepmd_deterministic else "--no-deepmd-deterministic")
         if deepmd_reuse_calculator is not None:

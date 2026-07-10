@@ -28,6 +28,12 @@ def test_dpa4_cli_options_are_recorded_in_dry_run(tmp_path: Path) -> None:
             "--backend",
             "dpa4",
             "--deepmd-deterministic",
+            "--deepmd-torch-threads",
+            "3",
+            "--force-workers",
+            "2",
+            "--force-parallel-backend",
+            "process",
             "--deepmd-reuse-calculator",
             "--save-force-audit",
             "--phono3py-symmetrize-fc2",
@@ -42,6 +48,9 @@ def test_dpa4_cli_options_are_recorded_in_dry_run(tmp_path: Path) -> None:
     assert data["backend_resolved"] == "deepmd"
     assert data["model_backend_family"] == "deepmd"
     assert data["deepmd_deterministic"] is True
+    assert data["deepmd_torch_threads"] == 3
+    assert data["force_workers"] == 2
+    assert data["force_parallel_backend"] == "process"
     assert data["deepmd_reuse_calculator"] is True
     assert data["save_force_audit"] is True
     assert data["phono3py_symmetrize_fc2"] is True

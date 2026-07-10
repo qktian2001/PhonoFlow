@@ -33,21 +33,29 @@ FC3Method = Literal["finite-displacement", "hiphive"]
 KappaMethod = Literal["rta", "lbte"]
 DeepMDForceBackend = Literal["ase", "deeppot"]
 DeepMDDevice = Literal["auto", "cpu", "cuda"]
+ForceParallelBackend = Literal["origin", "direct", "serial", "process", "worker_queue"]
 Phono3pyPlusMinus = Literal["auto", "true", "false"]
 KPathMode = Literal["auto", "3d_seekpath", "2d_ase", "custom"]
 DEFAULT_Q_MESH = [21, 21, 21]
+DEFAULT_KAPPA_MESH = [11, 11, 11]
 DEFAULT_2D_Q_MESH_IN_PLANE = 51
 _Q_MESH_AXIS_BY_VACUUM_DIRECTION = {"a": 0, "b": 1, "c": 2}
 
 
 def default_q_mesh() -> list[int]:
-    """Return the shared DOS/kappa gamma-centered q-mesh default."""
+    """Return the harmonic/DOS gamma-centered q-mesh default."""
 
     return list(DEFAULT_Q_MESH)
 
 
+def default_kappa_mesh() -> list[int]:
+    """Return the phono3py thermal-conductivity mesh default."""
+
+    return list(DEFAULT_KAPPA_MESH)
+
+
 def default_q_mesh_for_structure(vacuum_like_directions: list[str] | None = None) -> list[int]:
-    """Return the structure-aware shared DOS/kappa q-mesh default.
+    """Return the structure-aware harmonic/DOS q-mesh default.
 
     Bulk/3D systems keep the historical 21x21x21 default. A single
     vacuum-like direction is treated as a 2D slab: the periodic in-plane axes
@@ -81,20 +89,14 @@ def _is_explicit_triplet_value(value: Any) -> bool:
     return True
 
 
-def resolve_common_q_mesh(
+def resolve_kappa_mesh(
     mesh: AutoOrTriplet | None,
     kappa_mesh: AutoOrTriplet | None,
     vacuum_like_directions: list[str] | None = None,
 ) -> list[int]:
-    """Resolve one shared q-mesh from harmonic and thermal compatibility fields."""
+    """Resolve the thermal-conductivity q-mesh from compatibility fields."""
 
-    source = (
-        mesh
-        if isinstance(mesh, list)
-        else kappa_mesh
-        if isinstance(kappa_mesh, list)
-        else default_q_mesh_for_structure(vacuum_like_directions)
-    )
+    source = kappa_mesh if isinstance(kappa_mesh, list) else default_kappa_mesh()
     return [int(value) for value in source]
 
 
@@ -115,7 +117,7 @@ class WorkflowConfig(BaseModel):
     target_supercell_length: float = 15.0
     min_supercell_dim: int = 1
     max_supercell_dim: int = 6
-    max_supercell_atoms: int = 1000
+    max_supercell_atoms: int = 200
     relax: bool = True
     relax_cell: bool = True
     displacement: float = 0.01
@@ -139,7 +141,7 @@ class WorkflowConfig(BaseModel):
     kappa_mesh: AutoOrTriplet = "auto"
     fc3_supercell_dim: AutoOrTriplet = "auto"
     fc3_target_supercell_length: float = 10.0
-    max_fc3_supercell_atoms: int = 256
+    max_fc3_supercell_atoms: int = 200
     fc3_displacement: float = 0.03
     fc3_cutoff_pair_distance: float | None = None
     max_fc3_displacements: int | None = None
@@ -158,7 +160,21 @@ class WorkflowConfig(BaseModel):
     deepmd_force_backend: DeepMDForceBackend = "ase"
     deepmd_device: DeepMDDevice = "cpu"
     deepmd_model_head: str | None = None
+    deepmd_torch_threads: int | None = None
     deepmd_deterministic: bool = False
+    max_concurrent_jobs: int = 1
+    batch_workers: int = 1
+    force_workers: int = 1
+    force_parallel_backend: ForceParallelBackend = "serial"
+    force_chunk_size: int | None = None
+    force_max_pending_tasks: int | None = None
+    cpu_queue_enabled: bool = False
+    cpu_queue_total_slots: int | None = None
+    cpu_queue_max_running_jobs: int = 1
+    cpu_queue_job_slots: int = 1
+    cpu_queue_state_dir: Path | None = None
+    cpu_queue_timeout: float | None = None
+    auto_cpu_budget: bool = True
     save_force_audit: bool = False
     n_structures: int = 200
     rattle_std: float = 0.02
@@ -188,7 +204,7 @@ class WorkflowConfig(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def normalize_q_mesh_aliases(cls, raw: Any) -> Any:
+    def normalize_legacy_config_aliases(cls, raw: Any) -> Any:
         if not isinstance(raw, dict):
             return raw
         data = dict(raw)
@@ -199,21 +215,9 @@ class WorkflowConfig(BaseModel):
         if legacy_symprec is not None and "phonopy_symprec" not in data:
             data["phonopy_symprec"] = legacy_symprec
 
-        q_mesh = data.pop("q_mesh", None)
         dos_mesh = data.pop("dos_mesh", None)
-        if q_mesh is not None:
-            data["mesh"] = q_mesh
-            data["kappa_mesh"] = q_mesh
-            return data
         if dos_mesh is not None and not _is_explicit_triplet_value(data.get("mesh")):
             data["mesh"] = dos_mesh
-
-        mesh = data.get("mesh")
-        kappa_mesh = data.get("kappa_mesh")
-        if _is_explicit_triplet_value(mesh):
-            data["kappa_mesh"] = mesh
-        elif _is_explicit_triplet_value(kappa_mesh):
-            data["mesh"] = kappa_mesh
         return data
 
     @field_validator("backend", mode="before")
@@ -270,6 +274,11 @@ class WorkflowConfig(BaseModel):
     @field_validator("deepmd_device", mode="before")
     @classmethod
     def normalize_deepmd_device(cls, value: str) -> str:
+        return str(value).lower()
+
+    @field_validator("force_parallel_backend", mode="before")
+    @classmethod
+    def normalize_force_parallel_backend(cls, value: str) -> str:
         return str(value).lower()
 
     @field_validator("phono3py_plusminus", mode="before")
@@ -350,6 +359,11 @@ class WorkflowConfig(BaseModel):
         "max_supercell_dim",
         "max_fc3_supercell_atoms",
         "n_structures",
+        "max_concurrent_jobs",
+        "batch_workers",
+        "force_workers",
+        "cpu_queue_max_running_jobs",
+        "cpu_queue_job_slots",
     )
     @classmethod
     def validate_positive_int(cls, value: int) -> int:
@@ -357,11 +371,30 @@ class WorkflowConfig(BaseModel):
             raise ValueError("must be at least 1")
         return int(value)
 
-    @field_validator("max_fc3_displacements")
+    @field_validator(
+        "max_fc3_displacements",
+        "force_chunk_size",
+        "force_max_pending_tasks",
+        "cpu_queue_total_slots",
+    )
     @classmethod
     def validate_optional_positive_int(cls, value: int | None) -> int | None:
         if value is not None and value < 1:
             raise ValueError("must be at least 1")
+        return value
+
+    @field_validator("cpu_queue_timeout")
+    @classmethod
+    def validate_optional_nonnegative_float(cls, value: float | None) -> float | None:
+        if value is not None and value < 0:
+            raise ValueError("must be non-negative")
+        return float(value) if value is not None else None
+
+    @field_validator("deepmd_torch_threads")
+    @classmethod
+    def validate_optional_deepmd_torch_threads(cls, value: int | None) -> int | None:
+        if value is not None and value < 1:
+            raise ValueError("deepmd_torch_threads must be at least 1")
         return value
 
     @field_validator("fc3_cutoff_pair_distance")

@@ -33,8 +33,8 @@ from phonoflow.band import (
     plot_phonon_band,
 )
 from phonoflow.plotting.plot_dos import plot_phonon_dos
-from phonoflow.workflow.displace import create_phonopy, generate_displacements
-from phonoflow.workflow.force_eval import evaluate_forces
+from phonoflow.workflow.displace import create_phonopy, generate_displacements, phonopy_atoms_to_ase_atoms
+from phonoflow.workflow.force_eval import evaluate_forces_for_displacements
 
 
 def run_phonon_calculation(
@@ -68,14 +68,19 @@ def run_phonon_calculation(
     n_displaced = len(displaced_supercells)
     _log(log, f"Generated {n_displaced} displaced supercells")
 
-    force_sets = evaluate_forces(
-        displaced_supercells,
-        backend,
-        config.model_path,
+    force_result = evaluate_forces_for_displacements(
+        [phonopy_atoms_to_ase_atoms(supercell) for supercell in displaced_supercells],
+        backend=backend,
+        model_path=config.model_path,
+        config=config,
+        force_workers=config.force_workers,
+        force_parallel_backend=config.force_parallel_backend,
+        deepmd_device=config.deepmd_device,
         log=log,
         audit_outdir=outdir if config.save_force_audit else None,
         audit_label="fc2",
     )
+    force_sets = force_result.forces
     phonon.forces = force_sets
 
     _log(log, "Producing second-order force constants")
@@ -210,6 +215,10 @@ def run_phonon_calculation(
         "timing_breakdown": {
             "fc2_harmonic_seconds": round(fc2_seconds, 6),
             "phonon_postprocess_seconds": round(postprocess_seconds, 6),
+        },
+        "force_evaluation": {
+            "fc2": force_result.metadata,
+            "warnings": force_result.warnings,
         },
         **text_fc_info["result_fields"],
         **postprocess_info,

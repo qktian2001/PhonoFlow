@@ -47,7 +47,8 @@ def test_dpa3_alias_auto_resolves_registered_model_and_defaults(tmp_path: Path, 
     assert config.fc3_displacement == 0.03
     assert config.phono3py_symprec == 1e-5
     assert config.phono3py_cutoff_frequency == 1e-4
-    assert config.kappa_mesh == [21, 21, 21]
+    assert config.mesh == [21, 21, 21]
+    assert config.kappa_mesh == [11, 11, 11]
     assert config.deepmd_reuse_calculator is True
     assert config.deepmd_deterministic is True
     assert config.save_force_audit is True
@@ -86,7 +87,8 @@ def test_dpa_default_geometry_policy_matches_nep89_auto_policy(tmp_path: Path, m
     assert dpa3.supercell_info["source"] == "auto"
     assert dpa3.supercell_dim == nep89.supercell_dim
     assert dpa3.fc3_supercell_dim == nep89.fc3_supercell_dim == "auto"
-    assert dpa3.kappa_mesh == nep89.kappa_mesh == [21, 21, 21]
+    assert dpa3.mesh == nep89.mesh == [21, 21, 21]
+    assert dpa3.kappa_mesh == nep89.kappa_mesh == [11, 11, 11]
     assert dpa3.phono3py_symprec == nep89.phono3py_symprec == 1e-5
     assert dpa3.phono3py_cutoff_frequency == nep89.phono3py_cutoff_frequency == 1e-4
     assert dpa3.displacement == nep89.displacement == 0.01

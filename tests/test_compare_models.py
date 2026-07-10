@@ -347,7 +347,7 @@ def test_compare_model_command_forwards_phonopy_symprec() -> None:
     assert command[command.index("--phonopy-symprec") + 1] == "1e-05"
 
 
-def test_compare_model_command_forwards_lbte_and_shared_q_mesh() -> None:
+def test_compare_model_command_forwards_lbte_and_keeps_kappa_mesh_independent() -> None:
     command = _model_command(
         input_path=Path("examples/Si.vasp"),
         outdir=Path("results/nep89"),
@@ -368,7 +368,7 @@ def test_compare_model_command_forwards_lbte_and_shared_q_mesh() -> None:
     temperature_indices = [index for index, item in enumerate(command) if item == "--temperatures"]
     assert [command[index + 1] for index in temperature_indices] == ["100.0", "300.0"]
     assert command[command.index("--mesh") + 1 : command.index("--mesh") + 4] == ["3", "3", "3"]
-    assert command[command.index("--kappa-mesh") + 1 : command.index("--kappa-mesh") + 4] == ["3", "3", "3"]
+    assert command[command.index("--kappa-mesh") + 1] == "auto"
     assert command[command.index("--fc3-supercell-dim") + 1 : command.index("--fc3-supercell-dim") + 4] == ["2", "2", "2"]
     assert command[command.index("--fc3-cutoff-pair-distance") + 1] == "4.5"
 
@@ -583,7 +583,7 @@ def test_dpa4_safe_mode_command_applies_explicit_limits_without_common_target() 
     )
 
     assert command[command.index("--target-supercell-length") + 1] == "12.0"
-    assert command[command.index("--max-supercell-atoms") + 1] == "256"
+    assert command[command.index("--max-supercell-atoms") + 1] == "200"
 
 
 def test_kappa_summary_reads_result_dict_temperature_keys() -> None:

@@ -107,7 +107,13 @@ code. Use the live `init-config` output as the final source when editing a run.
 | `deepmd_force_backend` | `ase` | DeepMD force path: ASE or DeePMD direct. |
 | `deepmd_device` | `cpu` | DeepMD runtime device. |
 | `deepmd_model_head` | `null` | Optional multitask DeepMD model head. |
+| `deepmd_torch_threads` | `null` | Torch intra-op threads per DeepMD force worker. |
 | `deepmd_deterministic` | `false` | Best-effort deterministic DeepMD environment. |
+| `max_concurrent_jobs` | `1` | Maximum concurrently running Web jobs recorded for resource accounting. |
+| `batch_workers` | `1` | CLI batch worker count recorded for resource accounting. |
+| `force_workers` | `1` | Number of displaced structures evaluated concurrently within one job. |
+| `force_parallel_backend` | `serial` | Force-loop parallel backend: `serial` or `process`. |
+| `auto_cpu_budget` | `true` | Record estimated CPU budget and oversubscription warnings. |
 | `save_force_audit` | `false` | Save finite-displacement force diagnostics. |
 | `n_structures` | `200` | HiPhive rattle structure count. |
 | `rattle_std` | `0.02` | HiPhive rattle standard deviation. |

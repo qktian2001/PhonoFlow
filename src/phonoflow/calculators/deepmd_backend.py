@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import inspect
+import os as _os
 from pathlib import Path
 from typing import Any
 
@@ -37,9 +38,12 @@ class DeepMDBackend(CalculatorBackend):
         self.force_backend = "ase"
         self.device = "cpu"
         self.model_head: str | None = None
+        self.torch_threads: int | None = None
+        self.force_workers = 1
         self.deterministic = False
         self._calculator_cache: dict[str, Any] = {}
         self.deterministic_warnings: list[str] = []
+        self.runtime_thread_info: dict[str, Any] = {}
 
     def check_available(self) -> bool:
         try:
@@ -53,6 +57,8 @@ class DeepMDBackend(CalculatorBackend):
         self.force_backend = str(config.deepmd_force_backend)
         self.device = str(config.deepmd_device)
         self.model_head = config.deepmd_model_head
+        self.torch_threads = config.deepmd_torch_threads
+        self.force_workers = int(getattr(config, "force_workers", 1) or 1)
         self.deterministic = bool(config.deepmd_deterministic)
         if self.device == "cpu":
             os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
@@ -62,6 +68,21 @@ class DeepMDBackend(CalculatorBackend):
             os.environ.setdefault("DP_INFER_BATCH_SIZE", DPA4_DEFAULT_INFER_BATCH_SIZE)
         if self.deterministic:
             self.deterministic_warnings = _apply_deterministic_settings()
+            self.runtime_thread_info = _torch_thread_info(
+                device=self.device,
+                deterministic=self.deterministic,
+                requested_threads=self.torch_threads,
+                force_workers=self.force_workers,
+            )
+        else:
+            warnings = _apply_torch_thread_settings(self.torch_threads, force_workers=self.force_workers)
+            self.deterministic_warnings = warnings
+            self.runtime_thread_info = _torch_thread_info(
+                device=self.device,
+                deterministic=self.deterministic,
+                requested_threads=self.torch_threads,
+                force_workers=self.force_workers,
+            )
 
     def set_model_path(self, model_path: Path | None) -> None:
         self.model_path = Path(model_path) if model_path is not None else None
@@ -165,9 +186,9 @@ class DeepMDBackend(CalculatorBackend):
 
 
 def _apply_deterministic_settings() -> list[str]:
-    warnings: list[str] = []
+    warnings: list[str] = ["DeepMD deterministic mode is enabled; torch threads forced to 1 for reproducibility."]
     for name, value in DETERMINISTIC_ENV_VARS.items():
-        os.environ.setdefault(name, value)
+        os.environ[name] = value
     try:
         import torch
 
@@ -183,6 +204,53 @@ def _apply_deterministic_settings() -> list[str]:
     except Exception as exc:
         warnings.append(f"Could not apply torch deterministic settings: {exc}")
     return warnings
+
+
+def _apply_torch_thread_settings(requested_threads: int | None, *, force_workers: int = 1) -> list[str]:
+    warnings: list[str] = []
+    threads = requested_threads
+    if threads is None and force_workers > 1:
+        threads = 1
+        warnings.append("force_workers>1; DeepMD torch threads defaulted to 1 per worker to avoid CPU oversubscription.")
+    if threads is None:
+        return warnings
+    for name in DETERMINISTIC_ENV_VARS:
+        os.environ[name] = str(int(threads))
+    try:
+        import torch
+
+        torch.set_num_threads(int(threads))
+        try:
+            torch.set_num_interop_threads(int(threads))
+        except Exception as exc:
+            warnings.append(f"Could not set torch inter-op threads to {threads}: {exc}")
+    except Exception as exc:
+        warnings.append(f"Could not set torch threads to {threads}: {exc}")
+    return warnings
+
+
+def _torch_thread_info(
+    *,
+    device: str,
+    deterministic: bool,
+    requested_threads: int | None,
+    force_workers: int,
+) -> dict[str, Any]:
+    actual_threads: int | None = None
+    try:
+        import torch
+
+        actual_threads = int(torch.get_num_threads())
+    except Exception:
+        actual_threads = None
+    return {
+        "deepmd_device": device,
+        "deepmd_deterministic": bool(deterministic),
+        "requested_deepmd_torch_threads": requested_threads,
+        "actual_torch_num_threads": actual_threads,
+        "force_workers": int(force_workers),
+        "process_id": _os.getpid(),
+    }
 
 
 def _dp_accepts_device(dp_cls: Any) -> bool:

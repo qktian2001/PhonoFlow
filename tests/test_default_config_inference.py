@@ -29,7 +29,7 @@ def test_infer_default_config_outdir_and_defaults(monkeypatch):
     assert config.outdir == Path("results") / "Si_calorine"
     assert isinstance(config.supercell_dim, list)
     assert config.target_supercell_length == 15.0
-    assert config.max_supercell_atoms == 1000
+    assert config.max_supercell_atoms == 200
     assert config.min_supercell_dim == 1
     assert config.max_supercell_dim == 6
     assert config.supercell_info["n_atoms_supercell"] == 128

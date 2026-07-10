@@ -19,6 +19,7 @@ class CalorineBackend(CalculatorBackend):
 
     def __init__(self, model_path: Path | None = None) -> None:
         self.model_path = Path(model_path) if model_path is not None else None
+        self._calculator_cache: dict[str, Any] = {}
 
     def check_available(self) -> bool:
         try:
@@ -45,6 +46,9 @@ class CalorineBackend(CalculatorBackend):
                 f"NEP model file not found: {potential_path}\n"
                 "Please provide a valid --model-path, for example nep.txt or nep89.txt."
             )
+        cache_key = str(potential_path.resolve())
+        if cache_key in self._calculator_cache:
+            return self._calculator_cache[cache_key]
 
         try:
             from calorine.calculators import CPUNEP
@@ -61,7 +65,7 @@ class CalorineBackend(CalculatorBackend):
             ) from exc
 
         try:
-            return CPUNEP(str(potential_path))
+            calculator = CPUNEP(str(potential_path))
         except Exception as exc:
             raise BackendUnavailableError(
                 f"Failed to initialize Calorine CPUNEP with model file {potential_path}. "
@@ -70,6 +74,8 @@ class CalorineBackend(CalculatorBackend):
                 "older Calorine version, or a non-NEP potential file. "
                 f"Details: {exc}"
             ) from exc
+        self._calculator_cache[cache_key] = calculator
+        return calculator
 
     def supports_stress(self) -> bool:
         """Calorine CPUNEP exposes stress through the ASE calculator interface."""

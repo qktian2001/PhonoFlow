@@ -3,8 +3,10 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
+from phonopy.structure.atoms import PhonopyAtoms
 
 from phonoflow.config import WorkflowConfig
+from phonoflow.thermal import fc3_finite_displacement as fd
 from phonoflow.thermal.fc3_finite_displacement import _write_fd_diagnostics
 
 
@@ -17,6 +19,13 @@ class _FakePhono3py:
     supercell = _FakeSupercell()
     phonon_supercells_with_displacements = [object(), object()]
     supercells_with_displacements = [object(), object(), object()]
+
+
+class _FakeBackend:
+    name = "fake"
+
+    def calculate_energy_forces(self, atoms):
+        return {"energy": 0.0, "forces": np.ones((len(atoms), 3), dtype=float)}
 
 
 def test_fd_diagnostics_write_expected_fields(tmp_path: Path) -> None:
@@ -63,3 +72,30 @@ def test_fd_diagnostics_write_expected_fields(tmp_path: Path) -> None:
     assert "eV/Angstrom" in diagnostics["force_units_note"]
     for filename in diagnostics["files"].values():
         assert (tmp_path / filename).exists()
+
+
+def test_origin_force_backend_uses_old_style_loop_without_scheduler(monkeypatch) -> None:
+    supercell = PhonopyAtoms(
+        symbols=["Si"],
+        cell=np.eye(3) * 5.0,
+        scaled_positions=[[0.0, 0.0, 0.0]],
+    )
+    config = WorkflowConfig(force_parallel_backend="origin")
+
+    def fail_if_scheduler_called(*args, **kwargs):
+        raise AssertionError("origin should not call evaluate_forces_for_displacements")
+
+    monkeypatch.setattr(fd, "evaluate_forces_for_displacements", fail_if_scheduler_called)
+
+    result = fd._evaluate_phono3py_forces(
+        [supercell, supercell],
+        _FakeBackend(),
+        config,
+        log=None,
+        label="FC3",
+    )
+
+    assert result["forces"].shape == (2, 1, 3)
+    assert result["metadata"]["force_parallel_backend"] == "origin"
+    assert result["metadata"]["origin_no_scheduler"] is True
+    assert result["metadata"]["effective_force_workers"] == 1
