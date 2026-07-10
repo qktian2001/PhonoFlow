@@ -14,7 +14,8 @@ The current scheduler uses process-level parallelism:
    small chunks.
 4. A `ProcessPoolExecutor` evaluates bounded chunks instead of submitting all
    displacements at once.
-5. Each worker initializes its calculator once and reuses it for multiple tasks.
+5. Each worker initializes its calculator once and reuses it for multiple tasks
+   when the selected backend path supports worker-side reuse.
 6. Results are sorted by displacement index before forces are returned to
    phono3py.
 
@@ -26,10 +27,10 @@ displacement sets.
 
 - Repeated model/calculator creation inside process workers.
 - Excessive pending future count for large FC3 displacement lists.
-- Pickle/scheduling overhead by sending chunks instead of one future per
-  displacement.
+- Pickle/scheduling overhead by sending bounded chunks instead of one unbounded
+  future per displacement.
 - Result ordering consistency for `force_workers=1` and `force_workers>1`.
-- CLI resource-budget consistency.
+- Local CLI resource-budget consistency.
 
 ## What This Does Not Optimize Yet
 
@@ -56,8 +57,7 @@ The largest remaining costs are usually:
 
 ## Benchmark
 
-Use the lightweight benchmark to compare legacy-style one-future-per-displacement
-scheduling with the current chunked worker-reuse scheduler:
+Use the lightweight benchmark to compare direct/serial/process scheduling:
 
 ```bash
 PYTHONPATH=src python scripts/benchmark_force_scheduler.py --tasks 240 --workers 4
@@ -65,3 +65,17 @@ PYTHONPATH=src python scripts/benchmark_force_scheduler.py --tasks 240 --workers
 
 The script writes `force_scheduler_benchmark.json` into a timestamped directory
 under `work/scheduler_benchmarks/`.
+
+For real FC3 thermal-conductivity benchmarks, use:
+
+```bash
+PYTHONPATH=src python scripts/benchmark_force_workers.py \
+  --input-path examples/Si.vasp \
+  --backend calorine \
+  --model-path /path/to/nep-model.txt \
+  --workers 8 12 16 20 24 30 36 \
+  --chunk-sizes 1 2
+```
+
+The benchmark scripts are opt-in tools. They do not run automatically during
+normal `phonoflow single` or `phonoflow run` workflows.

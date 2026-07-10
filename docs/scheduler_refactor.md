@@ -14,6 +14,9 @@ from the scientific workflow code in `src/phonoflow`.
 - `phonoflow_scheduler.force_tasks`: order-preserving force task/result models.
 - `phonoflow_scheduler.process_pool`: serial/process force-task execution with
   worker calculator reuse, chunking, and bounded pending futures.
+- `phonoflow_scheduler.worker_queue`: prototype worker-pull execution path for
+  fine-grained load-balancing experiments.
+- `phonoflow_scheduler.cpu_queue*`: optional file-locked local CPU slot queue.
 - `phonoflow_scheduler.profiling`: small timing helper for future diagnostics.
 
 The old `phonoflow.resources.estimate_cpu_budget()` API remains available and
@@ -37,9 +40,8 @@ process pool and sorting `ForceResult` objects before returning forces.
 
 ## Thread Environment
 
-`phonoflow_scheduler.thread_env.build_thread_env()` centralizes the
-BLAS/OpenMP/DeepMD thread environment used by CLI subprocesses and worker
-processes. The scheduler can set:
+`phonoflow_scheduler.thread_env.build_thread_env()` centralizes subprocess
+thread-limit environment variables:
 
 - `OMP_NUM_THREADS`
 - `MKL_NUM_THREADS`
@@ -51,6 +53,10 @@ processes. The scheduler can set:
 - `TF_INTRA_OP_PARALLELISM_THREADS`
 - `TF_INTER_OP_PARALLELISM_THREADS`
 - `PHONOFLOW_THREAD_POOL_LIMIT`
+
+These limits are inherited by process-pool force workers and are especially
+important for CPU DeepMD/DPA jobs where each worker can otherwise create its own
+large internal thread pool.
 
 ## CLI/Internal Knobs
 
@@ -67,6 +73,15 @@ Two internal scheduler options are available for local benchmarking and tuning:
 
 Defaults are `None`, meaning the scheduler chooses conservative automatic
 values.
+
+The optional local CPU queue adds:
+
+- `--cpu-queue`
+- `--cpu-queue-total-slots`
+- `--cpu-queue-max-running-jobs`
+- `--cpu-queue-job-slots`
+- `--cpu-queue-state-dir`
+- `--cpu-queue-timeout`
 
 ## Safety
 

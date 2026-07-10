@@ -16,6 +16,9 @@ Core implementation areas:
 
 - `src/phonoflow/cli.py`: Typer command surface and CLI override plumbing.
 - `src/phonoflow/config.py`: validated `WorkflowConfig` defaults and aliases.
+- `src/phonoflow_scheduler/`: local CPU resource budgeting, thread
+  environment helpers, finite-displacement force-task scheduling, and optional
+  file-locked CPU queueing.
 - `src/phonoflow/workflow/`: relaxation, displacement, force evaluation, FC2,
   provenance, reports, output policy, and pipeline orchestration.
 - `src/phonoflow/thermal/`: FC3, Phono3py, lifetime, and kappa helpers.
@@ -28,6 +31,9 @@ Read next:
 
 - [CLI reference](cli.md)
 - [Configuration reference](configuration.md)
+- [CPU queue scheduler](cpu_queue_scheduler.md)
+- [FC3 displacement acceleration](fc3_displacement_acceleration.md)
+- [Scheduler refactor notes](scheduler_refactor.md)
 - [Output files](outputs.md)
 - [Architecture](architecture.md)
 - [Testing](testing.md)

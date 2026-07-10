@@ -13,10 +13,12 @@ workflow configuration and explicit backend adapters.
 4. `phonoflow.workflow.relax` optionally relaxes the structure.
 5. `phonoflow.workflow.displace` creates Phonopy displacement structures.
 6. `phonoflow.calculators` evaluates forces through the selected backend.
-7. `phonoflow.workflow.phonon` builds FC2, runs harmonic post-processing, and
+7. `phonoflow_scheduler` optionally parallelizes finite-displacement force
+   tasks while preserving displacement order.
+8. `phonoflow.workflow.phonon` builds FC2, runs harmonic post-processing, and
    writes band/DOS/group-velocity/stability outputs.
-8. `phonoflow.thermal` optionally builds FC3 and runs Phono3py kappa.
-9. `phonoflow.reporting` writes JSON, text, CSV, and timing summaries.
+9. `phonoflow.thermal` optionally builds FC3 and runs Phono3py kappa.
+10. `phonoflow.reporting` writes JSON, text, CSV, and timing summaries.
 
 ## Backends
 
@@ -49,6 +51,23 @@ forces, writes Phono3py parameters, and extracts kappa/lifetime outputs.
 `max_fc3_displacements` exists for smoke tests and debugging. Production runs
 should converge supercell size, displacement amplitude, q mesh, and the chosen
 RTA/LBTE settings without that cap.
+
+## Local CPU Scheduling
+
+Finite-displacement force evaluation is routed through
+`src/phonoflow/workflow/force_eval.py`, which adapts workflow structures into
+order-preserving scheduler tasks. The independent scheduler package provides:
+
+- `serial` and `direct` single-process paths,
+- `process` multiprocessing with calculator reuse and bounded pending work,
+- `worker_queue` prototype worker-pull scheduling,
+- CPU resource-budget warnings,
+- shared thread environment variables for BLAS/OpenMP/DeepMD,
+- an optional file-locked CPU queue for coordinating multiple local CLI jobs.
+
+The scheduler changes how independent force tasks are executed. It does not
+change displacement generation, force-constant assembly, Phono3py equations, or
+model parameters.
 
 ## Reproducibility
 
