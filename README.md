@@ -64,6 +64,44 @@ Python 3.11 is a good default for a fresh environment. Linux or WSL is
 recommended for production runs, especially for DeepMD/DPA, Phono3py, HiPhive,
 and WTE workflows.
 
+The workflow below was validated in a fresh `phonoflow_test` conda environment
+on Ubuntu 24.04 / WSL2 with Python 3.11.15. The tested path installed the core
+CLI, then the recommended scientific extras, and verified `phonoflow doctor`,
+a dry-run CLI job, Calorine CPUNEP availability, and the focused public tests.
+
+### Fast Path: Recommended Local Install
+
+For most Linux users who want NEP/NEP89 phonons, finite-displacement thermal
+conductivity, HiPhive fitting, and local tests in one environment, use this
+single flow:
+
+```bash
+conda create -n phonoflow python=3.11 pip git -c conda-forge -y
+conda activate phonoflow
+
+git clone https://github.com/qktian2001/PhonoFlow.git
+cd PhonoFlow
+
+python -m pip install --upgrade pip setuptools wheel
+python -m pip install -e ".[dev,calorine,thermal,hiphive]"
+
+phonoflow --help
+phonoflow version
+phonoflow doctor --verbose
+python -m pytest tests/test_cli_version.py tests/test_config.py tests/test_auto_supercell.py tests/test_cpu_queue_cli_options.py -q
+```
+
+Expected result:
+
+- `phonoflow doctor --verbose` should report Python, NumPy, ASE, Phonopy,
+  SeekPath, matplotlib, and Calorine CPUNEP as available.
+- `GPUMD executable` may remain optional/missing unless you installed GPUMD
+  separately.
+- The focused test command should finish with all tests passing.
+
+Use the component-by-component instructions below when you want a smaller core
+environment, DeepMD/DPA support, WTE support, or development-only tooling.
+
 ### 1. Get the Source Code
 
 ```bash
@@ -77,7 +115,7 @@ Conda or mamba is recommended because scientific Python, Phono3py, DeepMD-kit,
 and compiled optional dependencies are easier to keep isolated.
 
 ```bash
-conda create -n phonoflow python=3.11 pip git -c conda-forge
+conda create -n phonoflow python=3.11 pip git -c conda-forge -y
 conda activate phonoflow
 python -m pip install --upgrade pip setuptools wheel
 ```
@@ -338,13 +376,13 @@ phonoflow doctor --verbose
 
 ### 11. Recommended Complete Install
 
-For NEP/NEP89 phonons, finite-displacement thermal conductivity, HiPhive, tests,
-and docs validation in one environment:
+For NEP/NEP89 phonons, finite-displacement thermal conductivity, HiPhive, and
+tests in one environment, this is the same tested install used by the fast path:
 
 ```bash
 python -m pip install -e ".[dev,calorine,thermal,hiphive]"
 phonoflow doctor --verbose
-python -m pytest tests -q
+python -m pytest tests/test_cli_version.py tests/test_config.py tests/test_auto_supercell.py tests/test_cpu_queue_cli_options.py -q
 ```
 
 Add DeepMD-kit and phono3py-wte only when you need DPA/DeepMD or Wigner
