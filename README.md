@@ -6,9 +6,9 @@ connects ASE, Phonopy, Phono3py, Calorine CPUNEP, and optional DeepMD-kit
 backends behind reproducible CLI commands.
 
 The public repository contains the CLI engine, tests, public documentation, and
-one small Si structure for smoke tests. It does not contain model weights, run
-results, private application code, local archives, or private runtime
-configuration.
+small public structure examples for smoke tests and quick-start commands. It
+does not contain model weights, run results, private application code, local
+archives, or private runtime configuration.
 
 ## Core Capabilities
 
@@ -47,7 +47,7 @@ configuration.
 | Path | Purpose |
 | --- | --- |
 | `docs/` | PhonoFlow 1.0 CLI documentation, including command usage, configuration, outputs, architecture, and testing notes. |
-| `examples/` | Minimal public structure examples for smoke tests and quick-start commands. The current public fixture is `Si.vasp`. |
+| `examples/` | Minimal public structure examples for smoke tests and quick-start commands, including `Si.vasp`, `SiC.vasp`, `BAs.vasp`, `Diamond.vasp`, and `GaN.vasp`. |
 | `scripts/` | Small maintenance and validation helpers used by the command-line project. |
 | `src/phonoflow/` | Core Python package: CLI entry points, workflow orchestration, calculator backends, phonon/thermal logic, reporting, and I/O helpers. |
 | `tests/` | Public pytest suite for CLI behavior, configuration, workflow plumbing, backends, reporting, and output validation. |
@@ -612,6 +612,146 @@ include:
   `--cpu-queue-state-dir`, and `--cpu-queue-timeout`: optional local CPU slot
   reservation before a CLI workflow starts.
 
+## Full Local Configuration Parameter Table
+
+The table below mirrors the current `WorkflowConfig` defaults. For the expanded
+explanations and examples, see [Configuration reference](docs/configuration.md).
+Generate the live YAML template with `phonoflow init-config --out config.yaml`.
+
+### Paths And Backends
+
+| Field | Default | CLI option / scope | Purpose |
+| --- | --- | --- | --- |
+| `input_path` | `null` | `--input-path` | Single input structure path. |
+| `input_dir` | `null` | config/batch | Batch input directory. |
+| `outdir` | `null` | `--outdir` | Output directory; resolved automatically when omitted. |
+| `model_path` | `null` | `--model-path` | NEP, DeepMD, DPA, or compatible model path. |
+| `backend` | `auto` | `--backend` | `auto`, `dummy`, `calorine`, `gpumd`, `deepmd`, `dpa`, `dpa3`, `dpa4`, `dpa31`, `dpa32`, `dpa33`, or `dpa4neo`. |
+| `backend_alias` | `null` | metadata | Resolved user-facing backend alias. |
+| `dpa_model_name` | `null` | metadata | Resolved DPA model name. |
+
+### FC2, Harmonic Phonons, Band, DOS
+
+| Field | Default | CLI option / scope | Purpose |
+| --- | --- | --- | --- |
+| `supercell_dim` | `auto` | `--supercell-dim` | FC2 supercell triplet or `auto`. |
+| `target_supercell_length` | `15.0` | `--target-supercell-length` | FC2 auto target length in Angstrom. |
+| `min_supercell_dim` | `1` | `--min-supercell-dim` | Minimum auto multiplier. |
+| `max_supercell_dim` | `6` | `--max-supercell-dim` | Maximum auto multiplier. |
+| `max_supercell_atoms` | `200` | `--max-supercell-atoms` | Atom cap for auto FC2 supercells. |
+| `displacement` | `0.01` | `--displacement` | FC2 finite-displacement amplitude in Angstrom. |
+| `fc_method` | `finite-displacement` | `--fc-method` | Harmonic force-constant method. |
+| `mesh` | `auto` | `--mesh` | Harmonic/DOS mesh; independent from `kappa_mesh`. |
+| `primitive_matrix` | `P` | `--primitive-matrix` | Phonopy primitive matrix setting. |
+| `dos` | `true` | `--dos` / `--no-dos` | Compute phonon DOS outputs. |
+| `asr` | `true` | `--asr` / `--no-asr` | Apply acoustic sum rule where possible. |
+| `symmetrize_fc` | `true` | `--symmetrize-fc` / `--no-symmetrize-fc` | Symmetrize FC2 where possible. |
+| `export_fc2_text` | `true` | `--export-fc2-text` / `--no-export-fc2-text` | Export Phonopy and ShengBTE-style FC2 text files. |
+| `fc2_text_name` | `FORCE_CONSTANTS` | `--fc2-text-name` | Phonopy FC2 text filename. |
+| `shengbte_fc2_name` | `FORCE_CONSTANTS_2ND` | `--shengbte-fc2-name` | ShengBTE-style FC2 filename. |
+| `band` | `auto` | `--band` | Legacy band selector; usually leave `auto`. |
+| `kpath_mode` | `auto` | `--kpath-mode` | `auto`, `3d_seekpath`, `2d_ase`, or `custom`. |
+| `band_npoints` | `101` | config | Points per band segment. |
+| `bandpath_symprec` | `1e-5` | `--bandpath-symprec` | SeekPath and 2D ASE precision. |
+| `bandpath_with_time_reversal` | `false` | `--bandpath-with-time-reversal` | Use time-reversal reduction for 3D paths. |
+| `phonopy_symprec` | `1e-5` | `--phonopy-symprec` | Phonopy symmetry precision. |
+| `angle_tolerance` | `-1.0` | `--angle-tolerance` | spglib angle tolerance; `-1.0` means default. |
+| `imag_threshold` | `-0.1` | `--imag-threshold` | Imaginary-mode stability threshold in THz. |
+
+### Relaxation
+
+| Field | Default | CLI option / scope | Purpose |
+| --- | --- | --- | --- |
+| `relax` | `true` | `--relax` / `--no-relax` | Enable or skip relaxation. |
+| `relax_cell` | `true` | `--relax-cell` / `--no-relax-cell` | Relax cell and positions, or positions only. |
+| `fmax` | `1e-5` | `--fmax` | Relaxation force threshold in eV/A. |
+| `max_steps` | `2000` | `--max-steps` | Maximum optimizer steps. |
+| `optimizer` | `FIRE` | `--optimizer` | ASE optimizer name, commonly `FIRE` or `LBFGS`. |
+| `relax_backend` | `auto` | `--relax-backend` | Relaxation backend policy. |
+| `relax_model_path` | `null` | `--relax-model-path` | Optional relaxation-specific model path. |
+| `allow_dpa_relax` | `false` | `--allow-dpa-relax` | Explicitly permit DPA/DeepMD relaxation. |
+
+### FC3 And Thermal Conductivity
+
+| Field | Default | CLI option / scope | Purpose |
+| --- | --- | --- | --- |
+| `compute_kappa` | `false` | `--compute-kappa` | Enable FC3 and thermal conductivity. |
+| `fc3_method` | `finite-displacement` | `--fc3-method` | `finite-displacement` or `hiphive`. |
+| `kappa_method` | `rta` | `--method`, `--lbte`, `--rta` | Phono3py solver method. |
+| `wigner` | `false` | `--wigner true/false` | Request Wigner transport when available. |
+| `temperatures` | `[300.0]` | `--temperatures` | One or more temperatures in K. |
+| `kappa_mesh` | `auto` | `--kappa-mesh` | Thermal-conductivity mesh; `auto` resolves to `11 11 11`. |
+| `fc3_supercell_dim` | `auto` | `--fc3-supercell-dim` | FC3 supercell triplet or `auto`. |
+| `fc3_target_supercell_length` | `10.0` | `--fc3-target-supercell-length` | FC3 auto target length in Angstrom. |
+| `max_fc3_supercell_atoms` | `200` | `--max-fc3-supercell-atoms` | Atom cap for auto FC3 supercells. |
+| `fc3_displacement` | `0.03` | `--fc3-displacement` | FC3 displacement amplitude in Angstrom. |
+| `fc3_cutoff_pair_distance` | `null` | `--fc3-cutoff-pair-distance` | Optional phono3py FC3 pair cutoff. |
+| `max_fc3_displacements` | `null` | `--max-fc3-displacements` | Smoke-test cap; not for production convergence. |
+| `phono3py_symprec` | `1e-5` | `--phono3py-symprec` | phono3py symmetry precision. |
+| `phono3py_cutoff_frequency` | `1e-4` | `--phono3py-cutoff-frequency` | phono3py cutoff frequency in THz. |
+| `phono3py_plusminus` | `auto` | `--phono3py-plusminus` | `auto`, `true`, or `false`. |
+| `phono3py_diagonal` | `false` | `--phono3py-diagonal` | Use diagonal FC3 displacements. |
+| `phono3py_symmetry` | `true` | `--phono3py-symmetry` | Use phono3py symmetry reduction. |
+| `phono3py_mesh_symmetry` | `true` | `--phono3py-mesh-symmetry` | Use mesh symmetry in kappa. |
+| `phono3py_isotope` | `false` | `--isotope` / `--no-isotope` | Enable isotope scattering. |
+| `boundary_mfp` | `0.0` | `--boundary-mfp` | Boundary mean free path; zero disables it. |
+| `cutoff_pair_distance` | `0.0` | `--cutoff-pair-distance` | Additional pair cutoff; zero disables it. |
+| `phono3py_symmetrize_fc2` | `true` | `--phono3py-symmetrize-fc2` | Apply official phono3py FC2 symmetrization. |
+| `phono3py_symmetrize_fc3` | `true` | `--phono3py-symmetrize-fc3` | Apply official phono3py FC3 symmetrization. |
+
+### DeepMD And DPA
+
+| Field | Default | CLI option / scope | Purpose |
+| --- | --- | --- | --- |
+| `deepmd_reuse_calculator` | `true` | `--deepmd-reuse-calculator` | Reuse one ASE/DeepMD calculator inside force loops. |
+| `deepmd_force_backend` | `ase` | `--deepmd-force-backend` | `ase` or `deeppot`. |
+| `deepmd_device` | `cpu` | `--deepmd-device` | `auto`, `cpu`, or `cuda`. |
+| `deepmd_model_head` | `null` | `--deepmd-model-head` | Optional multitask model head. |
+| `deepmd_torch_threads` | `null` | `--deepmd-torch-threads` | Torch threads per DeepMD force worker. |
+| `deepmd_deterministic` | `false` | `--deepmd-deterministic` | Best-effort deterministic DeepMD subprocess policy. |
+
+### Local CPU Scheduling And Queue
+
+| Field | Default | CLI option / scope | Purpose |
+| --- | --- | --- | --- |
+| `max_concurrent_jobs` | `1` | config/resource metadata | Maximum concurrent jobs for CPU budget estimation. |
+| `batch_workers` | `1` | config/resource metadata | Batch worker count for CPU budget estimation. |
+| `force_workers` | `1` | `--force-workers` | Displaced structures evaluated concurrently inside one workflow. |
+| `force_parallel_backend` | `serial` | `--force-parallel-backend` | `origin`, `direct`, `serial`, `process`, or `worker_queue`. |
+| `force_chunk_size` | `null` | `--force-chunk-size` | Scheduler chunk size; `1` is the current recommended CPU FC3 starting point. |
+| `force_max_pending_tasks` | `null` | `--force-max-pending-tasks` | Bound pending scheduler chunks/tasks. |
+| `cpu_queue_enabled` | `false` | `--cpu-queue` | Enable optional file-locked local CPU-slot queue. |
+| `cpu_queue_total_slots` | `null` | `--cpu-queue-total-slots` | Total local CPU slots managed by the queue. |
+| `cpu_queue_max_running_jobs` | `1` | `--cpu-queue-max-running-jobs` | Maximum jobs allowed to hold queue leases. |
+| `cpu_queue_job_slots` | `1` | `--cpu-queue-job-slots` | CPU slots requested by this CLI job. |
+| `cpu_queue_state_dir` | `null` | `--cpu-queue-state-dir` | Queue state directory. |
+| `cpu_queue_timeout` | `null` | `--cpu-queue-timeout` | Maximum seconds to wait for a queue lease. |
+| `auto_cpu_budget` | `true` | `--auto-cpu-budget` | Record CPU budget and oversubscription warnings. |
+| `save_force_audit` | `false` | `--save-force-audit` | Save force hashes, statistics, and raw diagnostics. |
+
+### HiPhive, Output, Runtime
+
+| Field | Default | CLI option / scope | Purpose |
+| --- | --- | --- | --- |
+| `n_structures` | `200` | `--n-structures` | HiPhive rattle structure count. |
+| `rattle_std` | `0.02` | `--rattle-std` | HiPhive rattle standard deviation. |
+| `cutoffs` | `[5.0, 4.0]` | `--cutoffs` | HiPhive cutoff radii. |
+| `min_dist` | `1.8` | `--min-dist` | HiPhive minimum interatomic distance. |
+| `plot_dpi` | `300` | config | Plot resolution. |
+| `plot_format` | `png` | config | Plot format. |
+| `max_workers` | `1` | legacy/config metadata | Reserved compatibility worker-count field. |
+| `dry_run` | `false` | `--dry-run` | Resolve settings without heavy calculation. |
+| `print_config` | `false` | `--print-config` | Print resolved settings. |
+| `overwrite` | `false` | `--overwrite` | Allow replacing files in an existing output directory. |
+| `resume` | `false` | `--resume` | Reuse complete successful outputs where supported. |
+| `log_level` | `INFO` | `--log-level` | Logging verbosity. |
+
+Legacy config aliases are limited to compatibility helpers: `dos_mesh -> mesh`,
+`symprec -> phonopy_symprec`, and
+`phono3py_fc2_asr -> phono3py_symmetrize_fc2`. `q_mesh` is no longer part of the
+configuration chain; use `mesh` for harmonic/DOS and `kappa_mesh` for thermal
+conductivity.
+
 ## Documentation
 
 - [Docs index](docs/index.md)
@@ -635,7 +775,7 @@ dummy backend validates the baseline workflow without private model files.
 
 ## Repository Boundary
 
-The public repository is for CLI source, tests, public docs, and the small Si
-example. Generated calculations, HDF5 artifacts, PNG plots, model files,
-private notes, archives, database files, and private application files are
-intentionally kept out of Git.
+The public repository is for CLI source, tests, public docs, and small public
+structure examples. Generated calculations, HDF5 artifacts, PNG plots, model
+files, private notes, archives, database files, and private application files
+are intentionally kept out of Git.
