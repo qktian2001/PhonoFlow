@@ -64,16 +64,16 @@ Python 3.11 is a good default for a fresh environment. Linux or WSL is
 recommended for production runs, especially for DeepMD/DPA, Phono3py, HiPhive,
 and WTE workflows.
 
-The workflow below was validated in a fresh `phonoflow_test` conda environment
-on Ubuntu 24.04 / WSL2 with Python 3.11.15. The tested path installed the core
-CLI, then the recommended scientific extras, and verified `phonoflow doctor`,
-a dry-run CLI job, Calorine CPUNEP availability, and the focused public tests.
+The most portable Linux/HPC installation strategy is to let conda-forge install
+the heavy scientific binary packages first, then install PhonoFlow itself with
+pip in editable mode and `--no-deps`. This avoids accidental pip source builds
+of packages such as pandas, SciPy, or matplotlib on older cluster compilers.
 
-### Fast Path: Recommended Local Install
+### Fast Path: Stable Linux/HPC Local Install
 
-For most Linux users who want NEP/NEP89 phonons, finite-displacement thermal
-conductivity, HiPhive fitting, and local tests in one environment, use this
-single flow:
+For most Linux users who want a robust local CLI environment with phonons,
+Phono3py thermal conductivity, public tests, and optional NEP/HiPhive support,
+use this flow:
 
 ```bash
 conda create -n phonoflow python=3.11 pip git -c conda-forge -y
@@ -82,8 +82,16 @@ conda activate phonoflow
 git clone https://github.com/qktian2001/PhonoFlow.git
 cd PhonoFlow
 
+conda install -c conda-forge -y \
+  numpy scipy pandas matplotlib ase phonopy phono3py spglib seekpath \
+  pydantic typer rich pyyaml h5py pytest ruff mypy \
+  scikit-learn numba sympy
+
 python -m pip install --upgrade pip setuptools wheel
-python -m pip install -e ".[dev,calorine,thermal,hiphive]"
+python -m pip install -e . --no-deps
+
+# Optional, for NEP/NEP89 and HiPhive FC3 fitting:
+python -m pip install calorine hiphive
 
 phonoflow --help
 phonoflow version
@@ -94,7 +102,8 @@ python -m pytest tests/test_cli_version.py tests/test_config.py tests/test_auto_
 Expected result:
 
 - `phonoflow doctor --verbose` should report Python, NumPy, ASE, Phonopy,
-  SeekPath, matplotlib, and Calorine CPUNEP as available.
+  SeekPath, and matplotlib as available.
+- Calorine CPUNEP should be available after `python -m pip install calorine`.
 - `GPUMD executable` may remain optional/missing unless you installed GPUMD
   separately.
 - The focused test command should finish with all tests passing.
@@ -134,8 +143,20 @@ This installs the PhonoFlow console command plus the core dependencies declared
 in `pyproject.toml`: NumPy, SciPy, pandas, matplotlib, ASE, Phonopy, spglib,
 SeekPath, Pydantic, Typer, Rich, and PyYAML.
 
+For the most reliable Linux/HPC install, install those dependencies from
+conda-forge first:
+
 ```bash
-python -m pip install -e .
+conda install -c conda-forge -y \
+  numpy scipy pandas matplotlib ase phonopy spglib seekpath \
+  pydantic typer rich pyyaml
+```
+
+Then install PhonoFlow itself without asking pip to resolve or compile the heavy
+scientific stack again:
+
+```bash
+python -m pip install -e . --no-deps
 ```
 
 Verify the baseline command-line installation:
@@ -155,7 +176,7 @@ need the optional stacks below.
 Install this when you want to run the public test suite or contribute changes:
 
 ```bash
-python -m pip install -e ".[dev]"
+conda install -c conda-forge -y pytest ruff mypy
 python -m pytest tests -q
 ```
 
@@ -165,7 +186,7 @@ Calorine CPUNEP is the production backend used by PhonoFlow for NEP/NEP89 model
 files such as `nep89_20250409.txt`.
 
 ```bash
-python -m pip install -e ".[calorine]"
+python -m pip install calorine
 ```
 
 Check that the API required by PhonoFlow is importable:
@@ -190,10 +211,10 @@ phonoflow run \
 ### 6. Install Thermal-Conductivity Support
 
 Thermal conductivity, FC3 finite displacements, Phono3py RTA/LBTE, kappa HDF5
-parsing, and lifetime extraction require the `thermal` extra:
+parsing, and lifetime extraction require Phono3py and HDF5 support:
 
 ```bash
-python -m pip install -e ".[thermal]"
+conda install -c conda-forge -y phono3py h5py
 ```
 
 Verify Phono3py and HDF5 support:
@@ -230,7 +251,7 @@ HiPhive is optional. Use it when you want `--fc3-method hiphive` instead of
 direct Phono3py finite-displacement FC3 generation.
 
 ```bash
-python -m pip install -e ".[hiphive]"
+python -m pip install hiphive
 ```
 
 Verify the import:
@@ -324,7 +345,7 @@ uses the external `phono3py-wte` plugin and checks that the plugin registers
 Install Phono3py first:
 
 ```bash
-python -m pip install -e ".[thermal]"
+conda install -c conda-forge -y phono3py h5py
 ```
 
 Then install the WTE plugin from source in the same Python environment:
@@ -377,10 +398,15 @@ phonoflow doctor --verbose
 ### 11. Recommended Complete Install
 
 For NEP/NEP89 phonons, finite-displacement thermal conductivity, HiPhive, and
-tests in one environment, this is the same tested install used by the fast path:
+tests in one environment, use the conda-first workflow from the fast path:
 
 ```bash
-python -m pip install -e ".[dev,calorine,thermal,hiphive]"
+conda install -c conda-forge -y \
+  numpy scipy pandas matplotlib ase phonopy phono3py spglib seekpath \
+  pydantic typer rich pyyaml h5py pytest ruff mypy \
+  scikit-learn numba sympy
+python -m pip install -e . --no-deps
+python -m pip install calorine hiphive
 phonoflow doctor --verbose
 python -m pytest tests/test_cli_version.py tests/test_config.py tests/test_auto_supercell.py tests/test_cpu_queue_cli_options.py -q
 ```
