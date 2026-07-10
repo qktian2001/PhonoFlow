@@ -286,18 +286,21 @@ phonoflow single \
 
 DPA and DeepMD workflows are available through the `deepmd` backend and DPA
 aliases (`dpa31`, `dpa32`, `dpa33`, `dpa4neo`) when DeepMD-kit is installed and
-you provide compatible model files (`.pt`, `.pth`, or `.pb`). DeepMD-kit is not
-declared as a PhonoFlow extra because CPU/GPU, CUDA, MPI, PyTorch, and DPA model
-compatibility must match the user's environment.
+you provide compatible model files (`.pt`, `.pth`, or `.pb`). DeepMD-kit is
+optional and is not installed by the fast-path command above. The recommended
+PhonoFlow DPA/DeepMD reference version is `deepmd-kit==3.2.0b0`; pin this exact
+version unless you are deliberately validating another DeepMD-kit release.
+DeepMD-kit is not declared as a PhonoFlow extra because CPU/GPU, CUDA, MPI,
+PyTorch, and DPA model compatibility must match the user's environment.
 
-For a CPU-oriented environment, start with:
+For the recommended CPU-oriented DPA/DeepMD environment, install:
 
 ```bash
-python -m pip install deepmd-kit
+python -m pip install "deepmd-kit==3.2.0b0"
 ```
 
-For GPU/CUDA DPA runs, install the DeepMD-kit build that matches your CUDA,
-driver, PyTorch, MPI, and model requirements. If you see messages such as
+For GPU/CUDA DPA runs, install the `deepmd-kit==3.2.0b0` build that matches your
+CUDA, driver, PyTorch, MPI, and model requirements. If you see messages such as
 `Cannot find libcudart.so.12`, the DeepMD-kit build expects a CUDA runtime that
 is not visible in the current environment; either install the matching CUDA
 runtime or use a CPU-compatible DeepMD-kit build.
@@ -307,6 +310,8 @@ Verify the DeepMD ASE calculator used by PhonoFlow:
 ```bash
 python - <<'PY'
 from deepmd.calculator import DP
+import deepmd
+print("deepmd-kit", getattr(deepmd, "__version__", "version unknown"))
 print("DeepMD DP calculator import OK")
 PY
 ```
