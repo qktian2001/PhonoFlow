@@ -398,7 +398,7 @@ def compare_models(
             wigner=bool(wigner) if wigner is not None else False,
             temperatures=temperatures if temperatures is not None else [300.0],
             max_fc3_displacements=max_fc3_displacements,
-            max_supercell_atoms=200,
+            max_supercell_atoms=300,
             fmax=fmax if fmax is not None else 1e-5,
             max_steps=max_steps if max_steps is not None else 2000,
             primitive_matrix=primitive_matrix or "P",
@@ -875,7 +875,7 @@ def _model_command(
     if max_fc3_displacements is not None:
         command.extend(["--max-fc3-displacements", str(max_fc3_displacements)])
     if dpa_safe_mode:
-        command.extend(["--max-supercell-atoms", "200"])
+        command.extend(["--max-supercell-atoms", "300"])
     if fmax is not None:
         command.extend(["--fmax", str(fmax)])
     if max_steps is not None:

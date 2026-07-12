@@ -15,9 +15,9 @@ def test_default_config_values():
     assert config.kappa_method == "rta"
     assert config.temperatures == [300.0]
     assert config.target_supercell_length == 15.0
-    assert config.max_supercell_atoms == 200
+    assert config.max_supercell_atoms == 300
     assert config.fc3_target_supercell_length == 10.0
-    assert config.max_fc3_supercell_atoms == 200
+    assert config.max_fc3_supercell_atoms == 300
     assert config.max_concurrent_jobs == 1
     assert config.batch_workers == 1
     assert config.force_workers == 1

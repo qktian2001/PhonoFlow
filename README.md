@@ -23,7 +23,7 @@ archives, or private runtime configuration.
   installed, plus a GPUMD-oriented backend module.
 - Automatic defaults for supercells and q meshes, with explicit CLI/config
   overrides for production calculations. FC2 and FC3 auto supercells now obey
-  both the target length and the default 200-atom cap; cubic cells keep equal
+  both the target length and the default 300-atom cap; cubic cells keep equal
   multipliers when possible.
 - Independent harmonic/DOS and thermal meshes: `--mesh auto` resolves the
   Phonopy/DOS mesh, while `--kappa-mesh auto` resolves the Phono3py
@@ -447,9 +447,9 @@ Important current defaults:
 - `--kappa-mesh auto` controls the Phono3py thermal-conductivity mesh and
   resolves to the core default `11 11 11`.
 - FC2 `--supercell-dim auto` uses `--target-supercell-length` with the default
-  200-atom auto-supercell cap.
+  300-atom auto-supercell cap.
 - FC3 `--fc3-supercell-dim auto` uses `--fc3-target-supercell-length` with the
-  default 200-atom auto-supercell cap.
+  default 300-atom auto-supercell cap.
 - For cubic cells, automatic FC2/FC3 supercells keep the three multipliers equal
   when that satisfies the length and atom-count constraints.
 
@@ -707,7 +707,7 @@ Generate the live YAML template with `phonoflow init-config --out config.yaml`.
 | `target_supercell_length` | `15.0` | `--target-supercell-length` | FC2 auto target length in Angstrom. |
 | `min_supercell_dim` | `1` | `--min-supercell-dim` | Minimum auto multiplier. |
 | `max_supercell_dim` | `6` | `--max-supercell-dim` | Maximum auto multiplier. |
-| `max_supercell_atoms` | `200` | `--max-supercell-atoms` | Atom cap for auto FC2 supercells. |
+| `max_supercell_atoms` | `300` | `--max-supercell-atoms` | Atom cap for auto FC2 supercells. |
 | `displacement` | `0.01` | `--displacement` | FC2 finite-displacement amplitude in Angstrom. |
 | `fc_method` | `finite-displacement` | `--fc-method` | Harmonic force-constant method. |
 | `mesh` | `auto` | `--mesh` | Harmonic/DOS mesh; independent from `kappa_mesh`. |
@@ -752,7 +752,7 @@ Generate the live YAML template with `phonoflow init-config --out config.yaml`.
 | `kappa_mesh` | `auto` | `--kappa-mesh` | Thermal-conductivity mesh; `auto` resolves to `11 11 11`. |
 | `fc3_supercell_dim` | `auto` | `--fc3-supercell-dim` | FC3 supercell triplet or `auto`. |
 | `fc3_target_supercell_length` | `10.0` | `--fc3-target-supercell-length` | FC3 auto target length in Angstrom. |
-| `max_fc3_supercell_atoms` | `200` | `--max-fc3-supercell-atoms` | Atom cap for auto FC3 supercells. |
+| `max_fc3_supercell_atoms` | `300` | `--max-fc3-supercell-atoms` | Atom cap for auto FC3 supercells. |
 | `fc3_displacement` | `0.03` | `--fc3-displacement` | FC3 displacement amplitude in Angstrom. |
 | `fc3_cutoff_pair_distance` | `null` | `--fc3-cutoff-pair-distance` | Optional phono3py FC3 pair cutoff. |
 | `max_fc3_displacements` | `null` | `--max-fc3-displacements` | Smoke-test cap; not for production convergence. |

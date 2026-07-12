@@ -30,16 +30,16 @@ def test_auto_supercell_user_target_override():
     assert dims == [4, 4, 4]
 
 
-def test_auto_supercell_defaults_keep_atoms_at_or_below_200_when_target_is_large():
+def test_auto_supercell_defaults_keep_atoms_at_or_below_300_when_target_is_large():
     atoms = bulk("Si", "diamond", a=5.43)
     info = infer_supercell_info(atoms, target_supercell_length=30.0)
 
-    assert info["max_supercell_atoms"] == 200
-    assert info["n_atoms_supercell"] <= 200
+    assert info["max_supercell_atoms"] == 300
+    assert info["n_atoms_supercell"] <= 300
     assert info["initial_supercell_dim"] != info["supercell_dim"]
 
 
-def test_fc3_auto_supercell_uses_target_length_and_200_atom_default():
+def test_fc3_auto_supercell_uses_target_length_and_300_atom_default():
     atoms = bulk("Si", "diamond", a=5.43)
     config = WorkflowConfig(fc3_target_supercell_length=30.0)
 
@@ -49,8 +49,8 @@ def test_fc3_auto_supercell_uses_target_length_and_200_atom_default():
         max_supercell_atoms=config.max_fc3_supercell_atoms,
     )
 
-    assert config.max_fc3_supercell_atoms == 200
-    assert len(atoms) * dims[0] * dims[1] * dims[2] <= 200
+    assert config.max_fc3_supercell_atoms == 300
+    assert len(atoms) * dims[0] * dims[1] * dims[2] <= 300
 
 
 def test_auto_supercell_keeps_equal_lattice_lengths_isotropic_under_atom_cap():
