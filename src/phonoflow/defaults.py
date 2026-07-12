@@ -278,7 +278,7 @@ def infer_supercell_dim(
     target_supercell_length: float = 15.0,
     min_dim: int = 1,
     max_dim: int = 6,
-    max_supercell_atoms: int = 300,
+    max_supercell_atoms: int = 200,
     vacuum_like_directions: list[str] | None = None,
 ) -> list[int]:
     """Infer a finite-displacement supercell dimension from cell lengths."""
@@ -298,7 +298,7 @@ def infer_supercell_info(
     target_supercell_length: float = 15.0,
     min_dim: int = 1,
     max_dim: int = 6,
-    max_supercell_atoms: int = 300,
+    max_supercell_atoms: int = 200,
     vacuum_like_directions: list[str] | None = None,
 ) -> dict[str, Any]:
     """Infer supercell dimensions and return reproducibility diagnostics."""

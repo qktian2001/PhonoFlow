@@ -583,7 +583,7 @@ def test_dpa4_safe_mode_command_applies_explicit_limits_without_common_target() 
     )
 
     assert command[command.index("--target-supercell-length") + 1] == "12.0"
-    assert command[command.index("--max-supercell-atoms") + 1] == "300"
+    assert command[command.index("--max-supercell-atoms") + 1] == "200"
 
 
 def test_kappa_summary_reads_result_dict_temperature_keys() -> None:

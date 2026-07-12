@@ -117,7 +117,7 @@ class WorkflowConfig(BaseModel):
     target_supercell_length: float = 15.0
     min_supercell_dim: int = 1
     max_supercell_dim: int = 6
-    max_supercell_atoms: int = 300
+    max_supercell_atoms: int = 200
     relax: bool = True
     relax_cell: bool = True
     displacement: float = 0.01
@@ -141,7 +141,7 @@ class WorkflowConfig(BaseModel):
     kappa_mesh: AutoOrTriplet = "auto"
     fc3_supercell_dim: AutoOrTriplet = "auto"
     fc3_target_supercell_length: float = 10.0
-    max_fc3_supercell_atoms: int = 300
+    max_fc3_supercell_atoms: int = 200
     fc3_displacement: float = 0.03
     fc3_cutoff_pair_distance: float | None = None
     max_fc3_displacements: int | None = None

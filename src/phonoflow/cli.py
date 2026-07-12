@@ -1536,7 +1536,7 @@ def compare_models_command(
     dpa_safe_mode: bool = typer.Option(
         False,
         "--dpa-safe-mode",
-        help="Explicit DPA4 safety preset: 12 A target and 300-atom auto-supercell cap. Not a formal default.",
+        help="Explicit DPA4 safety preset: 12 A target and 200-atom auto-supercell cap. Not a formal default.",
     ),
 ) -> None:
     """Compare one to three independent model workflows on one structure."""

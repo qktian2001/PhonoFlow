@@ -104,7 +104,7 @@ The table below is organized by local CLI behavior. Defaults match the current
 | `target_supercell_length` | `15.0` | `--target-supercell-length` | Target length in Angstrom for automatic FC2 supercell inference. |
 | `min_supercell_dim` | `1` | `--min-supercell-dim` | Minimum automatic FC2 multiplier. |
 | `max_supercell_dim` | `6` | `--max-supercell-dim` | Maximum automatic FC2 multiplier. |
-| `max_supercell_atoms` | `300` | `--max-supercell-atoms` | Maximum atoms allowed in an automatically inferred FC2 supercell. |
+| `max_supercell_atoms` | `200` | `--max-supercell-atoms` | Maximum atoms allowed in an automatically inferred FC2 supercell. |
 | `displacement` | `0.01` | `--displacement` | Harmonic finite-displacement amplitude in Angstrom. |
 | `fc_method` | `finite-displacement` | `--fc-method` | Harmonic force-constant method. `finite-displacement` is the production path; `hiphive` is reserved where supported. |
 | `mesh` | `auto` | `--mesh` | Harmonic/DOS Phonopy mesh. `auto` is independent from `kappa_mesh`. |
@@ -149,7 +149,7 @@ The table below is organized by local CLI behavior. Defaults match the current
 | `kappa_mesh` | `auto` | `--kappa-mesh` | Phono3py thermal-conductivity mesh. Independent from `mesh`. |
 | `fc3_supercell_dim` | `auto` | `--fc3-supercell-dim` | FC3 supercell dimensions as three integers, or `auto`. |
 | `fc3_target_supercell_length` | `10.0` | `--fc3-target-supercell-length` | Target length in Angstrom for automatic FC3 supercell inference. |
-| `max_fc3_supercell_atoms` | `300` | `--max-fc3-supercell-atoms` | Maximum atoms allowed in an automatically inferred FC3 supercell. |
+| `max_fc3_supercell_atoms` | `200` | `--max-fc3-supercell-atoms` | Maximum atoms allowed in an automatically inferred FC3 supercell. |
 | `fc3_displacement` | `0.03` | `--fc3-displacement` | FC3 finite-displacement amplitude in Angstrom. |
 | `fc3_cutoff_pair_distance` | `null` | `--fc3-cutoff-pair-distance` | Optional phono3py FC3 pair cutoff distance. |
 | `max_fc3_displacements` | `null` | `--max-fc3-displacements` | Smoke-test cap on FC3 displaced structures. Do not use for production convergence. |

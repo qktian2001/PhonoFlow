@@ -90,7 +90,7 @@ Useful control flags:
 ## Harmonic Defaults
 
 - `--supercell-dim auto` uses `--target-supercell-length 15.0`, multiplier
-  bounds `1..6`, and `--max-supercell-atoms 300`.
+  bounds `1..6`, and `--max-supercell-atoms 200`.
 - `--mesh auto` resolves the harmonic/DOS mesh. Bulk structures use `21 21 21`;
   detected 2D slabs use a denser in-plane mesh such as `51 51 1`.
 - `--kappa-mesh` is independent and is not affected by `--mesh`.
@@ -141,7 +141,7 @@ phonoflow single \
 Thermal defaults:
 
 - `--fc3-supercell-dim auto` uses `--fc3-target-supercell-length 10.0` and
-  `--max-fc3-supercell-atoms 300`.
+  `--max-fc3-supercell-atoms 200`.
 - `--kappa-mesh auto` resolves to `11 11 11`.
 - `--max-fc3-displacements` is only a smoke-test cap and should not be used for
   converged production calculations.
